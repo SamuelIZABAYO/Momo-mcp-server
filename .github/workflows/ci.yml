@@ -55,16 +55,36 @@ jobs:
           provenance: false
           tags: momo-mcp-server:ci
 
-      - name: Fail build if any secret pattern is baked into image layers (§4.8)
+      - name: Fail build if secrets are baked into the image (§4.8)
         run: |
-          # No 32-hex subscription-key-shaped strings should exist in the layers.
-          docker save momo-mcp-server:ci -o /tmp/img.tar
-          if tar -xOf /tmp/img.tar | strings | grep -nE '\b[0-9a-f]{32}\b' \
-               | grep -viE 'sha256|blake2|md5|digest' | head -1; then
-            echo "Potential secret-shaped string found in image layers" >&2
+          set -euo pipefail
+          # The real risk is an accidental `COPY .env` (or a key embedded in a
+          # config/text file) — NOT bare 32-hex runs, which appear all over
+          # compiled extensions (cryptography, pydantic_core) as LLVM symbol
+          # hashes and would false-positive forever. So we check two precise
+          # things:
+          #   1) No .env file exists anywhere in the image filesystem.
+          #   2) No MOMO_*_KEY / MOMO_API_* assignment with a real value appears
+          #      in a TEXT file in the image (binaries are excluded).
+          cid=$(docker create momo-mcp-server:ci)
+          rootfs=/tmp/rootfs
+          mkdir -p "$rootfs"
+          docker export "$cid" | tar -C "$rootfs" -xf - || true
+          docker rm "$cid" >/dev/null
+
+          if find "$rootfs" -name '.env' -type f | grep -q .; then
+            echo "FAIL: a .env file is present in the image filesystem." >&2
             exit 1
           fi
-          echo "No secret-shaped strings in image layers."
+
+          # Grep only text files for a real key assignment (value, not blank,
+          # not an f-string placeholder).
+          if grep -rIlE '(MOMO_[A-Z_]*KEY|MOMO_API_(USER|KEY))=[^[:space:]{"'"'"']+' \
+               "$rootfs" 2>/dev/null | grep -q .; then
+            echo "FAIL: a MOMO_* credential assignment is baked into the image." >&2
+            exit 1
+          fi
+          echo "OK: no .env and no baked credentials in the image."
 
       - name: Trivy vulnerability scan (fail on HIGH/CRITICAL)
         # v0.33.1 pins its setup-trivy dependency by commit SHA, so it resolves
