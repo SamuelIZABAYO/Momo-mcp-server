@@ -86,16 +86,25 @@ jobs:
           fi
           echo "OK: no .env and no baked credentials in the image."
 
+      - name: Install Trivy (official script — avoids flaky wrapper action)
+        # The aquasecurity/trivy-action wrapper has been fragile (unpublished
+        # setup-trivy tag refs, installer exit-1s). Installing the binary
+        # directly from the official script is fewer moving parts and pins the
+        # version we run.
+        run: |
+          set -euo pipefail
+          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
+            | sh -s -- -b /usr/local/bin v0.58.1
+          trivy --version
+
       - name: Trivy vulnerability scan (fail on HIGH/CRITICAL)
-        # v0.33.1 pins its setup-trivy dependency by commit SHA, so it resolves
-        # regardless of which setup-trivy tags exist (earlier releases referenced
-        # an unpublished setup-trivy@v0.2.2 tag and failed to resolve).
-        uses: aquasecurity/trivy-action@v0.33.1
-        with:
-          image-ref: momo-mcp-server:ci
-          severity: HIGH,CRITICAL
-          exit-code: "1"
-          ignore-unfixed: true
+        run: |
+          trivy image \
+            --severity HIGH,CRITICAL \
+            --ignore-unfixed \
+            --exit-code 1 \
+            --no-progress \
+            momo-mcp-server:ci
 
       - name: Generate SBOM (syft)
         uses: anchore/sbom-action@v0.24.0
