@@ -86,15 +86,21 @@ jobs:
           fi
           echo "OK: no .env and no baked credentials in the image."
 
-      - name: Install Trivy (official script — avoids flaky wrapper action)
-        # The aquasecurity/trivy-action wrapper has been fragile (unpublished
-        # setup-trivy tag refs, installer exit-1s). Installing the binary
-        # directly from the official script is fewer moving parts and pins the
-        # version we run.
+      - name: Install Trivy (Aqua's official apt repository)
+        # The wrapper action and the install.sh script both failed on this runner
+        # (exit 1 right after version detection). Installing from Aqua's official
+        # Debian repo via apt is the most robust path on ubuntu-latest: no nested
+        # actions, no release-asset name guessing, no privileged-path writes under
+        # `set -e`.
         run: |
-          set -euo pipefail
-          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
-            | sh -s -- -b /usr/local/bin v0.58.1
+          set -euxo pipefail
+          sudo apt-get install -y wget gnupg
+          wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key \
+            | gpg --dearmor | sudo tee /usr/share/keyrings/trivy.gpg > /dev/null
+          echo "deb [signed-by=/usr/share/keyrings/trivy.gpg] https://aquasecurity.github.io/trivy-repo/deb generic main" \
+            | sudo tee /etc/apt/sources.list.d/trivy.list
+          sudo apt-get update
+          sudo apt-get install -y trivy
           trivy --version
 
       - name: Trivy vulnerability scan (fail on HIGH/CRITICAL)
