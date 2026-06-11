@@ -1,6 +1,14 @@
 # syntax=docker/dockerfile:1
 # ── Hardened, multi-stage build (spec §4.8) ──────────────────────────────────
 # Base pinned by digest (python:3.12-slim, resolved 2026-06-11). No `latest`.
+#
+# Image size: ~242MB. The spec's original <200MB target is NOT met, by choice.
+# The official `mcp` SDK pulls in starlette/uvicorn/cryptography to support HTTP
+# transports we never use (we run stdio only), and those set a ~240MB floor on
+# python:3.12-slim. Switching to alpine would save ~70MB but risks musl-wheel
+# breakage with `cryptography`; a fragile 190MB image is worse than a robust
+# 242MB one. We pruned what we safely could (pip, bytecode, bundled tests).
+# See GOTCHAS.md for the full rationale.
 ARG BASE_DIGEST=sha256:a39549e211a16149edf74e5fdc9ef03a6767e46cd987c5048b6659b6c9904c94
 
 # ── builder: install deps + the app into a self-contained venv ───────────────

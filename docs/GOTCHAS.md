@@ -108,3 +108,20 @@ products; you do not provision twice.
 collections (verified 2026-06-11: `APPROVAL_REJECTED` → REJECTED, `EXPIRED` →
 TIMEOUT). The one body difference: the counterparty key is `payee` (not
 `payer`). This is why the provider shares one normalization path for both flows.
+
+## 12. The Docker image is ~242MB, not <200MB — a deliberate trade-off
+
+The build spec (§4.8) set a <200MB image target. We don't meet it, on purpose,
+and document why rather than chase the number through fragility. The official
+`mcp` Python SDK depends on `starlette`, `uvicorn`, and `cryptography` to support
+its HTTP/SSE transports — none of which this server uses, because MCP clients
+launch it over **stdio**. Those unused-transport deps set a ~240MB floor on a
+`python:3.12-slim` base. We pruned everything safe to remove (pip, setuptools,
+`__pycache__`, bundled test dirs), which got us from 274MB to 242MB.
+
+Switching the base to `python:3.12-alpine` would save ~70MB but is a known
+source of `cryptography` musl-wheel build failures; a 190MB image won through
+brittleness is a worse outcome than a robust 242MB one for a payments component.
+**Revised target: <250MB with the rationale documented.** If the `mcp` SDK ever
+splits its transport extras (so stdio-only installs skip starlette/uvicorn), the
+sub-200MB target becomes reachable without the alpine risk.
