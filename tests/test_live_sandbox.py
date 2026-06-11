@@ -66,3 +66,32 @@ async def test_live_request_and_status_all_outcomes(provider, msisdn, expected):
         f"{msisdn}: expected {expected}, got {res.status.value} "
         f"(raw={res.raw_status})"
     )
+
+
+async def test_live_payout_approval_gate(provider):
+    """send_payout must not move money without approval, then must execute with a
+    valid code — verified against the real disbursement transfer endpoint."""
+    pending = await provider.send_payout(msisdn="46733123451", amount=5, currency="EUR")
+    assert pending.pending_approval is True
+    assert pending.transaction_id is None  # nothing sent yet
+
+    done = await provider.confirm_payout(pending.approval_code)
+    assert done.transaction_id  # a transfer was issued
+    res = await provider.check_payment_status(done.transaction_id)
+    # 46733123451 -> APPROVAL_REJECTED -> REJECTED (or still PENDING under latency)
+    assert res.status in (PaymentStatus.REJECTED, PaymentStatus.PENDING)
+
+
+async def test_live_balance_handled_either_way(provider):
+    """Balance is inconsistently available in sandbox (GOTCHAS §5): it has
+    returned 500 NOT_ALLOWED, 404 RESOURCE_NOT_FOUND, and 200 on different runs.
+    Whichever happens, the tool must behave sanely — either raise a clear
+    ProviderError or return a structured BalanceResult, never crash. The
+    deterministic blocked-path assertion lives in the mocked unit tests."""
+    from momo_mcp.providers.base import BalanceResult, ProviderError
+
+    try:
+        result = await provider.get_balance("collection")
+        assert isinstance(result, BalanceResult)
+    except ProviderError as exc:
+        assert str(exc)  # clear, non-empty message

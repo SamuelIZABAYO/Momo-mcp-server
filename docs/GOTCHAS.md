@@ -49,14 +49,18 @@ Only terminal `SUCCESSFUL` responses include `financialTransactionId` (MTN's own
 settlement id). It is absent while `PENDING` and on failures. Store it when
 present — it is what an accountant reconciles against.
 
-## 5. `account/balance` is blocked in this sandbox
+## 5. `account/balance` is blocked in this sandbox (both products)
 
-`GET /collection/v1_0/account/balance` returned
-`500 {"code":"NOT_ALLOWED_TARGET_ENVIRONMENT","message":"Access to target
-environment is forbidden."}`. Balance retrieval is not exercisable in the
-Collections sandbox tier we have. `get_balance` is implemented against the
-documented contract but its live test is skipped with this reason recorded — a
-production go-live item, not a code bug.
+`GET /collection/v1_0/account/balance` is **inconsistent** in sandbox: across
+runs on 2026-06-11 it returned `500 NOT_ALLOWED_TARGET_ENVIRONMENT`, then `404
+RESOURCE_NOT_FOUND`, and on at least one run a `200`. The disbursement equivalent
+`GET /disbursement/v1_0/account/balance` returned `500 {"code":"NOT_ALLOWED",
+"message":"Authorization failed. Insufficient permissions."}`. Balance retrieval
+is effectively **not reliable in either sandbox tier**. `get_balance` is
+implemented against the documented contract and surfaces the real error honestly
+(non-200 → clear `ProviderError`); the live test tolerates either outcome, while
+the deterministic blocked-path behavior is pinned in the mocked unit tests. This
+is a production go-live/permissions item, not a code bug.
 
 ## 6. `accountholder/.../active` is inconsistent in sandbox
 
@@ -87,3 +91,19 @@ proactively at 80% of lifetime (≈48 min) rather than waiting for a 401.
 `POST /v1_0/apiuser` returns `201` with no body — the `X-Reference-Id` you sent
 *is* the API user id. Only the subsequent `POST /v1_0/apiuser/{id}/apikey`
 returns a body (`{"apiKey": "..."}`). Don't parse the first response.
+
+## 10. Disbursements reuse the same provisioned API user/key
+
+The API user + key created by `scripts/provision.py` (against the Collections
+subscription key) **also authenticate the Disbursements product** — `POST
+/disbursement/token/` with the same Basic credentials + the disbursement
+subscription key returns a valid token. One provisioning step covers both
+products; you do not provision twice.
+
+## 11. `disbursement/v1_0/transfer` mirrors `requesttopay` exactly
+
+`POST /disbursement/v1_0/transfer` → `202` empty body; poll `GET
+/disbursement/v1_0/transfer/{referenceId}`. Same status/`reason` semantics as
+collections (verified 2026-06-11: `APPROVAL_REJECTED` → REJECTED, `EXPIRED` →
+TIMEOUT). The one body difference: the counterparty key is `payee` (not
+`payer`). This is why the provider shares one normalization path for both flows.

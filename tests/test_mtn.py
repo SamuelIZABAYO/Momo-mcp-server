@@ -234,3 +234,58 @@ async def test_dry_run_status_resolves_successful(monkeypatch, store):
         assert res.dry_run is True
     finally:
         await provider.aclose()
+
+
+# ── get_balance / validate_account ───────────────────────────────────────────
+async def test_get_balance_dry_run(monkeypatch, store):
+    settings = _settings(monkeypatch, DRY_RUN="true")
+    provider = MTNProvider(settings=settings, store=store)
+    try:
+        bal = await provider.get_balance("collection")
+        assert bal.dry_run is True
+        assert bal.currency == "EUR"
+    finally:
+        await provider.aclose()
+
+
+@respx.mock
+async def test_get_balance_surfaces_sandbox_block(monkeypatch, store):
+    settings = _settings(monkeypatch)
+    respx.post(TOKEN_URL).mock(return_value=_token())
+    respx.get(f"{BASE}/collection/v1_0/account/balance").mock(
+        return_value=httpx.Response(500, json={"code": "NOT_ALLOWED_TARGET_ENVIRONMENT"})
+    )
+    provider = MTNProvider(settings=settings, store=store)
+    try:
+        with pytest.raises(ProviderError, match="not permitted in the sandbox"):
+            await provider.get_balance("collection")
+    finally:
+        await provider.aclose()
+
+
+async def test_validate_account_dry_run(monkeypatch, store):
+    settings = _settings(monkeypatch, DRY_RUN="true")
+    provider = MTNProvider(settings=settings, store=store)
+    try:
+        v = await provider.validate_account("46733123453")
+        assert v.is_active is True
+        assert v.dry_run is True
+        assert "3453" in v.msisdn_masked  # last-4 preserved, rest masked
+    finally:
+        await provider.aclose()
+
+
+@respx.mock
+async def test_validate_account_404_is_honest(monkeypatch, store):
+    settings = _settings(monkeypatch)
+    respx.post(TOKEN_URL).mock(return_value=_token())
+    respx.get(f"{BASE}/collection/v1_0/accountholder/msisdn/46733123450/active").mock(
+        return_value=httpx.Response(404, json={"code": "RESOURCE_NOT_FOUND"})
+    )
+    provider = MTNProvider(settings=settings, store=store)
+    try:
+        v = await provider.validate_account("46733123450")
+        assert v.is_active is False
+        assert "unreliable" in v.message.lower()
+    finally:
+        await provider.aclose()

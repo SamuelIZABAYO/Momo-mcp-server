@@ -136,6 +136,12 @@ class PaymentProvider(ABC):
     ) -> PayoutResult:
         """Disbursement transfer — approval-gated (§4.3)."""
 
+    async def confirm_payout(self, approval_code: str) -> PayoutResult:
+        """Execute a previously-requested payout using its one-time approval code
+        (§4.3). Default raises NotImplementedError; providers that support the
+        approval gate override it."""
+        raise NotImplementedError("This provider does not implement payout approval.")
+
     @abstractmethod
     async def health(self) -> ProviderHealth:
         """Token validity, latency, recent error rate."""

@@ -115,6 +115,20 @@ def test_approval_unknown_rejected(store):
     assert store.consume_approval("does-not-exist") is None
 
 
+def test_reset_limits_clears_count_but_keeps_history(store):
+    for i in range(3):
+        store.create_transaction(
+            reference_id=f"r{i}", kind="collection", tool="t",
+            msisdn="46733123450", amount=10, currency="EUR", dry_run=False,
+        )
+    assert store.daily_usage().tx_count == 3
+    store.reset_limits(note="manual reset")
+    # Usage counts only post-reset transactions, so the counter clears...
+    assert store.daily_usage().tx_count == 0
+    # ...but the ledger history is preserved (audit/reconciliation intact).
+    assert len(store.list_transactions()) == 3
+
+
 def test_idempotency_survives_reopen(tmp_path):
     """Persisted-before-send survives a process restart: reopen the DB file and
     the PENDING row is still there for reconciliation (§4.1)."""

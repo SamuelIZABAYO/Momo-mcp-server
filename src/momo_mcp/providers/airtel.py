@@ -43,6 +43,9 @@ class AirtelProvider(PaymentProvider):
     async def send_payout(self, **_: object) -> PayoutResult:
         raise NotImplementedError(_MSG)
 
+    async def confirm_payout(self, approval_code: str) -> PayoutResult:
+        raise NotImplementedError(_MSG)
+
     async def health(self) -> ProviderHealth:
         return ProviderHealth(
             provider=self.name,
