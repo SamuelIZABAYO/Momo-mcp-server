@@ -1,0 +1,51 @@
+[project]
+name = "momo-mcp-server"
+version = "0.1.0"
+description = "Safety-first, production-grade MTN Mobile Money (sandbox) MCP server."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Samuel Izabayo" }]
+keywords = ["mcp", "mtn", "momo", "mobile-money", "payments", "sandbox"]
+
+dependencies = [
+    "mcp>=1.2.0",
+    "httpx>=0.27",
+    "pydantic>=2.6",
+    "python-dotenv>=1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "respx>=0.21",
+    "ruff>=0.6",
+]
+
+[project.scripts]
+momo-mcp-server = "momo_mcp.server:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/momo_mcp"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests", "scripts"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "C4"]
+ignore = ["E501"]  # line length handled by formatter; long URLs/docstrings tolerated
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+markers = [
+    "live: hits the real MTN sandbox; requires credentials in .env (deselect with -m 'not live')",
+]
+pythonpath = ["src"]

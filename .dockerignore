@@ -1,0 +1,40 @@
+# Mirrors .gitignore, plus excludes dev-only material from the image (§4.8).
+# Secrets — must never enter image layers
+.env
+.env.*
+
+# Runtime data / kill switch
+/data/
+*.sqlite
+*.sqlite3
+*.db
+PAUSE
+
+# VCS & CI
+.git/
+.github/
+
+# Dev-only: tests and docs are not runtime essentials
+tests/
+docs/
+*.md
+!README.md
+
+# Python build/cache artifacts
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
