@@ -15,8 +15,9 @@ later.
 > **Sandbox only.** This repository contains no production endpoints or
 > real-money code paths by policy. See [Hard Rules](#hard-rules).
 
-> **Build status:** Phase 1 (skeleton + config + provisioning) complete.
-> Tools land in Phases 2–4 — see the [build phases](#build-phases).
+> **Build status:** Phases 1–2 complete — config/provisioning, plus live
+> Collections (`request_payment`, `check_payment_status`) verified against the
+> MTN sandbox. Remaining tools land in Phases 3–4 — see the [build phases](#build-phases).
 
 ---
 
@@ -122,7 +123,7 @@ Full configuration reference: [`.env.example`](.env.example).
 | Phase | Scope | Status |
 |---|---|---|
 | 1 | Skeleton + config + provisioning script | ✅ done |
-| 2 | Auth + MTN Collections (`request_payment`, `check_payment_status`) | ⏳ |
+| 2 | Auth + MTN Collections (`request_payment`, `check_payment_status`) | ✅ done |
 | 3 | Disbursements + approval gate + remaining tools | ⏳ |
 | 4 | MCP wiring (stdio) + Airtel stub + Docker | ⏳ |
 | 5 | Docs + demo + safety scorecard | ⏳ |
