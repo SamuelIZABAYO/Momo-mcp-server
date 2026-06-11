@@ -19,6 +19,7 @@ from __future__ import annotations
 import asyncio
 import time
 import uuid
+from datetime import UTC, datetime, timedelta
 
 import httpx
 
@@ -31,6 +32,7 @@ from ..store import Store
 from .base import (
     AccountValidation,
     BalanceResult,
+    GuardrailRejection,
     PaymentProvider,
     PaymentResult,
     PaymentStatus,
@@ -40,6 +42,9 @@ from .base import (
 )
 
 log = get_logger("mtn")
+
+# Approval code time-to-live in minutes (§4.3).
+_APPROVAL_TTL_MIN = 15
 
 # Map MTN's raw (status, reason) onto our normalized PaymentStatus (GOTCHAS §2).
 _REASON_TO_STATUS = {
@@ -86,10 +91,28 @@ class MTNProvider(PaymentProvider):
             api_key=settings.api_key or "",
             subscription_key=settings.collection_subscription_key,
         )
+        # Disbursements reuse the same provisioned API user/key (GOTCHAS §10),
+        # with the disbursement subscription key.
+        self._disbursement_tokens = TokenManager(
+            client=self._client,
+            base_url=settings.base_url,
+            product="disbursement",
+            api_user=settings.api_user or "",
+            api_key=settings.api_key or "",
+            subscription_key=settings.disbursement_subscription_key,
+        )
 
     async def aclose(self) -> None:
         if self._owns_client:
             await self._client.aclose()
+
+    def _product_ctx(self, product: str) -> tuple[TokenManager, str]:
+        """Return (token manager, subscription key) for a product."""
+        if product == "collection":
+            return self._collection_tokens, self._settings.collection_subscription_key
+        if product == "disbursement":
+            return self._disbursement_tokens, self._settings.disbursement_subscription_key
+        raise ValueError(f"unknown product {product!r}")
 
     # ── shared request helper: rate limit + 401-retry-once (§3.2) ────────────
     async def _authed_request(
@@ -102,14 +125,14 @@ class MTNProvider(PaymentProvider):
         json_body: dict | None = None,
     ) -> httpx.Response:
         await self._bucket.acquire()
-        tokens = self._collection_tokens  # only product wired in Phase 2
+        tokens, sub_key = self._product_ctx(product)
         url = f"{self._settings.base_url}{path}"
 
         async def _do(token: str) -> httpx.Response:
             headers = {
                 "Authorization": f"Bearer {token}",
                 "X-Target-Environment": self._settings.target_env,
-                "Ocp-Apim-Subscription-Key": self._settings.collection_subscription_key,
+                "Ocp-Apim-Subscription-Key": sub_key,
             }
             if extra_headers:
                 headers.update(extra_headers)
@@ -241,6 +264,15 @@ class MTNProvider(PaymentProvider):
                 raw_status=tx.status,
             )
 
+        # Status path + product depend on whether this was a collection or a
+        # disbursement (GOTCHAS §11): transfers poll a different URL.
+        if tx.kind == "disbursement":
+            status_path = f"/disbursement/v1_0/transfer/{transaction_id}"
+            product = "disbursement"
+        else:
+            status_path = f"/collection/v1_0/requesttopay/{transaction_id}"
+            product = "collection"
+
         # Poll with capped backoff: 2,4,8,16,30 → ~60s total (§3.4).
         delays = [0, 2, 4, 8, 16, 30]
         last: PaymentResult | None = None
@@ -248,9 +280,7 @@ class MTNProvider(PaymentProvider):
             if delay:
                 await asyncio.sleep(delay)
             try:
-                resp = await self._authed_request(
-                    "GET", f"/collection/v1_0/requesttopay/{transaction_id}"
-                )
+                resp = await self._authed_request("GET", status_path, product=product)
             except AuthError as exc:
                 raise ProviderError(str(exc)) from exc
             if resp.status_code != 200:
@@ -293,15 +323,195 @@ class MTNProvider(PaymentProvider):
             case _:
                 return "Payment is still pending payer approval."
 
-    # ── tools completed in Phase 3 ───────────────────────────────────────────
+    # ── send_payout (Disbursements transfer, approval-gated §4.3) ────────────
+    async def send_payout(
+        self,
+        *,
+        msisdn: str,
+        amount: float,
+        currency: str,
+        approval_code: str | None = None,
+        note: str | None = None,
+    ) -> PayoutResult:
+        # Guardrails first (§4.7) — same gauntlet as collections.
+        enforce_mutation(
+            msisdn=msisdn, amount=amount, settings=self._settings, store=self._store
+        )
+
+        # Approval gate: when required and no code supplied, mint a one-time code
+        # and STOP. The money does not move until confirm_payout is called with
+        # this code. This is what makes "the AI cannot move money unilaterally"
+        # demonstrable (§4.3, §7.1).
+        if self._settings.require_payout_approval and not approval_code:
+            code = uuid.uuid4().hex[:12].upper()
+            expires_at = (
+                datetime.now(UTC) + timedelta(minutes=_APPROVAL_TTL_MIN)
+            ).isoformat()
+            self._store.create_approval(
+                code=code, msisdn=msisdn, amount=amount,
+                currency=currency, expires_at=expires_at,
+            )
+            return PayoutResult(
+                transaction_id=None,
+                status=None,
+                message=(
+                    f"Payout of {amount} {currency} to …{msisdn[-4:]} requires "
+                    f"human approval. It has NOT been sent. Call confirm_payout "
+                    f"with approval_code={code} (valid {_APPROVAL_TTL_MIN} min) to "
+                    "execute it. Tell the user a human must approve."
+                ),
+                pending_approval=True,
+                approval_code=code,
+            )
+
+        # If a code was supplied, validate+consume it (single-use, not expired).
+        if self._settings.require_payout_approval:
+            row = self._store.consume_approval(approval_code or "")
+            if row is None:
+                raise GuardrailRejection(
+                    "Approval code is invalid, expired, or already used. The "
+                    "payout was NOT sent. Request a fresh approval. Inform the "
+                    "user; do not retry with the same code.",
+                    reason_code="approval_invalid",
+                )
+            # The code binds to a specific msisdn+amount; refuse mismatches so a
+            # valid code can't be redirected to a different payout.
+            if abs(row["amount"] - amount) > 1e-9 or row["msisdn"] != msisdn:
+                raise GuardrailRejection(
+                    "Approval code does not match this payout's amount/recipient. "
+                    "The payout was NOT sent. Inform the user; do not retry.",
+                    reason_code="approval_mismatch",
+                )
+
+        return await self._execute_transfer(msisdn, amount, currency, note)
+
+    async def confirm_payout(self, approval_code: str) -> PayoutResult:
+        """Execute a previously-requested payout using its one-time code (§4.3).
+
+        Looks up the pending approval (without consuming it yet — _execute path
+        via send_payout consumes it), then runs send_payout with the code so the
+        single consume+execute path is shared.
+        """
+        # Peek the approval to recover msisdn/amount/currency for the transfer.
+        # We consume inside send_payout to keep one atomic consume point.
+        row = self._store._conn.execute(  # read-only peek
+            "SELECT * FROM approvals WHERE code=?", (approval_code,)
+        ).fetchone()
+        if row is None:
+            raise GuardrailRejection(
+                "Unknown approval code. No payout was sent. Inform the user.",
+                reason_code="approval_unknown",
+            )
+        return await self.send_payout(
+            msisdn=row["msisdn"], amount=row["amount"],
+            currency=row["currency"], approval_code=approval_code,
+        )
+
+    async def _execute_transfer(
+        self, msisdn: str, amount: float, currency: str, note: str | None
+    ) -> PayoutResult:
+        reference_id = str(uuid.uuid4())
+        # Persist before send (§4.1).
+        self._store.create_transaction(
+            reference_id=reference_id, kind="disbursement", tool="send_payout",
+            msisdn=msisdn, amount=amount, currency=currency,
+            dry_run=self._settings.dry_run, note=note,
+        )
+        if self._settings.dry_run:
+            return PayoutResult(
+                transaction_id=reference_id, status=PaymentStatus.PENDING,
+                message="DRY_RUN: simulated payout accepted (no HTTP call).",
+                dry_run=True,
+            )
+
+        body = {
+            "amount": str(amount),
+            "currency": currency,
+            "externalId": reference_id,
+            "payee": {"partyIdType": "MSISDN", "partyId": msisdn},  # payee, not payer
+            "payerMessage": note or "Payout",
+            "payeeNote": note or "Payout",
+        }
+        try:
+            resp = await self._authed_request(
+                "POST", "/disbursement/v1_0/transfer", product="disbursement",
+                extra_headers={"X-Reference-Id": reference_id, "Content-Type": "application/json"},
+                json_body=body,
+            )
+        except AuthError as exc:
+            raise ProviderError(str(exc)) from exc
+        if resp.status_code != 202:
+            raise ProviderError(
+                f"send_payout failed (HTTP {resp.status_code}): "
+                f"{resp.text[:200] or '<empty>'}. Recorded PENDING locally as "
+                f"{reference_id}; reconcile via check_payment_status.",
+                retryable=resp.status_code >= 500,
+            )
+        return PayoutResult(
+            transaction_id=reference_id, status=PaymentStatus.PENDING,
+            message=(
+                "Payout accepted and is being processed. Poll check_payment_status "
+                "with this transaction_id for the outcome."
+            ),
+        )
+
+    # ── get_balance (blocked in sandbox — GOTCHAS §5) ────────────────────────
     async def get_balance(self, account: str) -> BalanceResult:
-        raise ProviderError("get_balance is implemented in Phase 3.")
+        if account not in ("collection", "disbursement"):
+            raise ProviderError("account must be 'collection' or 'disbursement'.")
+        if self._settings.dry_run:
+            return BalanceResult(
+                account=account, available_balance="1000.00",
+                currency=self._settings.currency, dry_run=True,
+            )
+        path = f"/{account}/v1_0/account/balance"
+        try:
+            resp = await self._authed_request("GET", path, product=account)
+        except AuthError as exc:
+            raise ProviderError(str(exc)) from exc
+        if resp.status_code != 200:
+            raise ProviderError(
+                f"get_balance unavailable (HTTP {resp.status_code}): "
+                f"{resp.text[:200]}. Note: balance is not permitted in the sandbox "
+                "tier (see GOTCHAS §5); this works once go-live permissions are "
+                "granted. Not a retryable error."
+            )
+        data = resp.json()
+        return BalanceResult(
+            account=account,
+            available_balance=str(data.get("availableBalance", "")),
+            currency=data.get("currency", self._settings.currency),
+        )
 
+    # ── validate_account (inconsistent in sandbox — GOTCHAS §6) ──────────────
     async def validate_account(self, msisdn: str) -> AccountValidation:
-        raise ProviderError("validate_account is implemented in Phase 3.")
-
-    async def send_payout(self, **_: object) -> PayoutResult:
-        raise ProviderError("send_payout is implemented in Phase 3.")
+        if self._settings.dry_run:
+            return AccountValidation(
+                msisdn_masked=mask_msisdn(msisdn), is_active=True,
+                message="DRY_RUN: simulated active account.", dry_run=True,
+            )
+        path = f"/collection/v1_0/accountholder/msisdn/{msisdn}/active"
+        try:
+            resp = await self._authed_request("GET", path, product="collection")
+        except AuthError as exc:
+            raise ProviderError(str(exc)) from exc
+        if resp.status_code == 200:
+            active = bool(resp.json().get("result", False))
+            return AccountValidation(
+                msisdn_masked=mask_msisdn(msisdn), is_active=active,
+                message="Account is active." if active else "Account is not active.",
+            )
+        if resp.status_code == 404:
+            return AccountValidation(
+                msisdn_masked=mask_msisdn(msisdn), is_active=False,
+                message=(
+                    "Account not found. Note: in sandbox this endpoint is "
+                    "unreliable for the magic test numbers (GOTCHAS §6)."
+                ),
+            )
+        raise ProviderError(
+            f"validate_account failed (HTTP {resp.status_code}): {resp.text[:200]}."
+        )
 
     async def health(self) -> ProviderHealth:
         return ProviderHealth(

@@ -77,6 +77,15 @@ CREATE TABLE IF NOT EXISTS approvals (
     consumed_at  TEXT                          -- NULL until used; set once, never reused
 );
 
+-- Human-triggered daily-limit resets (§4.7). daily_usage only counts
+-- transactions created at/after the most recent reset, so a human running
+-- scripts/reset_limits.py clears a hard-stop without deleting ledger history.
+CREATE TABLE IF NOT EXISTS limit_resets (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    reset_at   TEXT NOT NULL,
+    note       TEXT
+);
+
 PRAGMA journal_mode=WAL;
 PRAGMA foreign_keys=ON;
 """
@@ -253,19 +262,43 @@ class Store:
         ).fetchall()
         return [Transaction.from_row(r) for r in rows]
 
-    # ── daily usage (spend limits, §4.7) ─────────────────────────────────────
+    # ── daily usage + limit resets (spend limits, §4.7) ──────────────────────
+    def latest_reset_today(self, day: str | None = None) -> str | None:
+        """The most recent limit-reset timestamp for the given UTC day, if any."""
+        d = day or _utc_date()
+        row = self._conn.execute(
+            "SELECT MAX(reset_at) AS r FROM limit_resets WHERE substr(reset_at,1,10)=?",
+            (d,),
+        ).fetchone()
+        return row["r"] if row and row["r"] else None
+
     def daily_usage(self, date: str | None = None) -> DailyUsage:
-        """Count + sum of real (non-dry-run) non-rejected mutations for a UTC day."""
+        """Count + sum of real (non-dry-run) non-rejected mutations for a UTC day.
+
+        Only counts transactions created at/after the most recent limit reset for
+        that day, so a human running scripts/reset_limits.py clears a hard-stop
+        without erasing ledger history (§4.7)."""
         day = date or _utc_date()
+        floor = self.latest_reset_today(day) or ""
         row = self._conn.execute(
             """SELECT COUNT(*) AS n, COALESCE(SUM(amount),0) AS total
                FROM transactions
                WHERE dry_run=0
                  AND status != 'REJECTED'
-                 AND substr(created_at,1,10)=?""",
-            (day,),
+                 AND substr(created_at,1,10)=?
+                 AND created_at >= ?""",
+            (day, floor),
         ).fetchone()
         return DailyUsage(date=day, tx_count=row["n"], total_amount=row["total"])
+
+    def reset_limits(self, note: str | None = None) -> str:
+        """Record a limit reset now; subsequent daily_usage counts from here."""
+        ts = _utcnow()
+        with self._tx() as conn:
+            conn.execute(
+                "INSERT INTO limit_resets (reset_at, note) VALUES (?,?)", (ts, note)
+            )
+        return ts
 
     # ── audit (append-only, §4.2) ────────────────────────────────────────────
     def record_audit(
