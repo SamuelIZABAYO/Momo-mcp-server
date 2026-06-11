@@ -67,7 +67,10 @@ jobs:
           echo "No secret-shaped strings in image layers."
 
       - name: Trivy vulnerability scan (fail on HIGH/CRITICAL)
-        uses: aquasecurity/trivy-action@v0.29.0
+        # v0.33.1 pins its setup-trivy dependency by commit SHA, so it resolves
+        # regardless of which setup-trivy tags exist (earlier releases referenced
+        # an unpublished setup-trivy@v0.2.2 tag and failed to resolve).
+        uses: aquasecurity/trivy-action@v0.33.1
         with:
           image-ref: momo-mcp-server:ci
           severity: HIGH,CRITICAL
