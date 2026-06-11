@@ -272,19 +272,27 @@ class Store:
         ).fetchone()
         return row["r"] if row and row["r"] else None
 
-    def daily_usage(self, date: str | None = None) -> DailyUsage:
-        """Count + sum of real (non-dry-run) non-rejected mutations for a UTC day.
+    def daily_usage(
+        self, date: str | None = None, *, include_dry_run: bool = True
+    ) -> DailyUsage:
+        """Count + sum of non-rejected mutations for a UTC day.
+
+        ``include_dry_run`` defaults to True because the spend LIMITS are about
+        agent *behavior*, not settlement: a guardrail must stop an oversized or
+        runaway spree even in DRY_RUN (the safe demo mode), so the safety
+        scorecard is truthful. Set it False to report real money actually moved.
 
         Only counts transactions created at/after the most recent limit reset for
         that day, so a human running scripts/reset_limits.py clears a hard-stop
         without erasing ledger history (§4.7)."""
         day = date or _utc_date()
         floor = self.latest_reset_today(day) or ""
+        dry_clause = "" if include_dry_run else "AND dry_run=0"
         row = self._conn.execute(
-            """SELECT COUNT(*) AS n, COALESCE(SUM(amount),0) AS total
+            f"""SELECT COUNT(*) AS n, COALESCE(SUM(amount),0) AS total
                FROM transactions
-               WHERE dry_run=0
-                 AND status != 'REJECTED'
+               WHERE status != 'REJECTED'
+                 {dry_clause}
                  AND substr(created_at,1,10)=?
                  AND created_at >= ?""",
             (day, floor),

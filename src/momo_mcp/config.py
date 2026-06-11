@@ -44,10 +44,34 @@ def _redact(value: str | None) -> str:
     return f"<set:{len(value)} chars>"
 
 
+# Env vars whose values must NOT have inline-comment stripping applied (a secret
+# could, in principle, contain a '#'). Everything else is a simple scalar where a
+# trailing " # comment" is never intended — and `docker run --env-file` does not
+# strip those, so we do it defensively here.
+_SECRET_ENV = frozenset(
+    {
+        "MOMO_COLLECTION_SUBSCRIPTION_KEY",
+        "MOMO_DISBURSEMENT_SUBSCRIPTION_KEY",
+        "MOMO_REMITTANCE_SUBSCRIPTION_KEY",
+        "MOMO_API_USER",
+        "MOMO_API_KEY",
+    }
+)
+
+
+def _strip_inline_comment(value: str) -> str:
+    """Drop a trailing ' # comment' (whitespace before #). Leaves leading-# and
+    mid-token # untouched."""
+    idx = value.find(" #")
+    return value[:idx] if idx != -1 else value
+
+
 def _get(name: str, default: str | None = None) -> str | None:
     raw = os.environ.get(name, default)
     if raw is None:
         return None
+    if name not in _SECRET_ENV:
+        raw = _strip_inline_comment(raw)
     raw = raw.strip()
     return raw or None
 

@@ -59,15 +59,26 @@ def test_update_status_validates_state(store):
         store.update_status("s1", "BOGUS")
 
 
-def test_daily_usage_excludes_dry_run_and_rejected(store):
+def test_daily_usage_counts_dry_run_for_limits_by_default(store):
+    """Limits must apply even in DRY_RUN, so the default counts dry-run rows;
+    rejected rows are always excluded."""
     _create(store, "real1", amount=10.0, dry_run=False)
     _create(store, "real2", amount=15.0, dry_run=False)
-    _create(store, "dry1", amount=99.0, dry_run=True)       # excluded: dry-run
+    _create(store, "dry1", amount=99.0, dry_run=True)       # counted (limits)
     _create(store, "rej1", amount=50.0, dry_run=False)
     store.update_status("rej1", "REJECTED")                  # excluded: rejected
     usage = store.daily_usage()
-    assert usage.tx_count == 2
-    assert usage.total_amount == 25.0
+    assert usage.tx_count == 3
+    assert usage.total_amount == 124.0
+
+
+def test_daily_usage_real_money_only_excludes_dry_run(store):
+    """Reporting of money actually moved excludes dry-run rows."""
+    _create(store, "real1", amount=10.0, dry_run=False)
+    _create(store, "dry1", amount=99.0, dry_run=True)
+    usage = store.daily_usage(include_dry_run=False)
+    assert usage.tx_count == 1
+    assert usage.total_amount == 10.0
 
 
 def test_audit_is_append_only_and_ordered(store):

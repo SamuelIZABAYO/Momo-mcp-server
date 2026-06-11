@@ -58,9 +58,10 @@ RESOURCE_NOT_FOUND`, and on at least one run a `200`. The disbursement equivalen
 "message":"Authorization failed. Insufficient permissions."}`. Balance retrieval
 is effectively **not reliable in either sandbox tier**. `get_balance` is
 implemented against the documented contract and surfaces the real error honestly
-(non-200 → clear `ProviderError`); the live test tolerates either outcome, while
-the deterministic blocked-path behavior is pinned in the mocked unit tests. This
-is a production go-live/permissions item, not a code bug.
+(non-200 → clear `ProviderError`); the live test tolerates whichever outcome the
+sandbox returns on the day, while the deterministic blocked-path behavior is
+pinned in the mocked unit tests. This is a production go-live/permissions item,
+not a code bug.
 
 ## 6. `accountholder/.../active` is inconsistent in sandbox
 
