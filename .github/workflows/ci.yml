@@ -31,3 +31,68 @@ jobs:
 
       - name: Test (unit; live sandbox suite excluded)
         run: pytest -m "not live" -q
+
+  docker:
+    runs-on: ubuntu-latest
+    needs: lint-and-test
+    permissions:
+      contents: read
+      packages: write    # to publish to GHCR on tags
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image (load locally for scanning)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          provenance: false
+          tags: momo-mcp-server:ci
+
+      - name: Fail build if any secret pattern is baked into image layers (§4.8)
+        run: |
+          # No 32-hex subscription-key-shaped strings should exist in the layers.
+          docker save momo-mcp-server:ci -o /tmp/img.tar
+          if tar -xOf /tmp/img.tar | strings | grep -nE '\b[0-9a-f]{32}\b' \
+               | grep -viE 'sha256|blake2|md5|digest' | head -1; then
+            echo "Potential secret-shaped string found in image layers" >&2
+            exit 1
+          fi
+          echo "No secret-shaped strings in image layers."
+
+      - name: Trivy vulnerability scan (fail on HIGH/CRITICAL)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: momo-mcp-server:ci
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+          ignore-unfixed: true
+
+      - name: Generate SBOM (syft)
+        uses: anchore/sbom-action@v0
+        with:
+          image: momo-mcp-server:ci
+          artifact-name: sbom.spdx.json
+
+      # Publish to GHCR only on semver tags (e.g. v0.1.0).
+      - name: Log in to GHCR
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push tagged release to GHCR
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          provenance: false
+          tags: |
+            ghcr.io/samuelizabayo/momo-mcp-server:latest
+            ghcr.io/samuelizabayo/momo-mcp-server:${{ github.ref_name }}

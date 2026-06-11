@@ -1,0 +1,27 @@
+# VPS / always-on deployment (spec §4.8). For local MCP-client use you do not
+# need compose — clients launch the image directly with `docker run -i --rm`
+# (see README). This file is for running the server as a managed service.
+services:
+  momo-mcp-server:
+    image: ghcr.io/samuelizabayo/momo-mcp-server:latest
+    build: .
+    # Secrets are injected, never baked into the image.
+    env_file:
+      - .env
+    # Persist the SQLite store + PAUSE kill switch across restarts.
+    volumes:
+      - momo-data:/data
+    # Read-only root filesystem; only the mounted volume is writable.
+    read_only: true
+    restart: unless-stopped
+    # stdio transport needs an attached stdin when driven by a client.
+    stdin_open: true
+    tty: false
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  momo-data:
