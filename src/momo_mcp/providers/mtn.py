@@ -394,9 +394,7 @@ class MTNProvider(PaymentProvider):
         """
         # Peek the approval to recover msisdn/amount/currency for the transfer.
         # We consume inside send_payout to keep one atomic consume point.
-        row = self._store._conn.execute(  # read-only peek
-            "SELECT * FROM approvals WHERE code=?", (approval_code,)
-        ).fetchone()
+        row = self._store.get_approval(approval_code)  # read-only peek
         if row is None:
             raise GuardrailRejection(
                 "Unknown approval code. No payout was sent. Inform the user.",

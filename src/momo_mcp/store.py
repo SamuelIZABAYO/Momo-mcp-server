@@ -347,6 +347,16 @@ class Store:
                 (code, msisdn, amount, currency, _utcnow(), expires_at),
             )
 
+    def get_approval(self, code: str) -> sqlite3.Row | None:
+        """Read-only lookup of an approval by code (no state change).
+
+        Used to recover an approval's payee/amount/currency before executing it.
+        Does NOT consume the code — call :meth:`consume_approval` for that, which
+        is the single atomic consume point (replay-safe)."""
+        return self._conn.execute(
+            "SELECT * FROM approvals WHERE code=?", (code,)
+        ).fetchone()
+
     def consume_approval(self, code: str) -> sqlite3.Row | None:
         """Atomically mark an approval consumed. Returns the row on success.
 

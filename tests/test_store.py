@@ -116,6 +116,17 @@ def test_approval_single_use(store):
     assert store.consume_approval("C1") is None
 
 
+def test_get_approval_is_read_only(store):
+    store.create_approval(code="PEEK", msisdn="46733123450", amount=20.0,
+                          currency="EUR", expires_at=_future())
+    row = store.get_approval("PEEK")
+    assert row is not None and row["msisdn"] == "46733123450"
+    assert row["consumed_at"] is None
+    # Peeking must NOT consume — the code is still usable afterwards.
+    assert store.consume_approval("PEEK") is not None
+    assert store.get_approval("missing") is None
+
+
 def test_approval_expired_rejected(store):
     store.create_approval(code="C2", msisdn="46733123450", amount=20.0,
                           currency="EUR", expires_at=_past())
