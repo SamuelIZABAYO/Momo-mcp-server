@@ -1,6 +1,6 @@
 """Agent guardrails, enforced in the provider layer so no tool can bypass them.
 Each check raises :class:`GuardrailRejection` with a reason code on breach;
-rejections are never retryable and the message tells the LLM to inform the user,
+rejections are never retryable and the message tells the client to inform the user,
 not retry.
 
 Checks live here, decoupled from any provider, so tests can exercise them

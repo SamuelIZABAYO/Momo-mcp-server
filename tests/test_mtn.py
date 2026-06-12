@@ -21,6 +21,7 @@ _ENV = {
     "MOMO_COLLECTION_SUBSCRIPTION_KEY": "a" * 32,
     "MOMO_DISBURSEMENT_SUBSCRIPTION_KEY": "b" * 32,
     "MOMO_BASE_URL": BASE,
+    "MOMO_CALLBACK_HOST": "https://callback.example",
     "MOMO_API_USER": "11111111-1111-1111-1111-111111111111",
     "MOMO_API_KEY": "k" * 16,
     "MSISDN_ALLOWLIST": "46733123453,46733123450,46733123451,46733123452",
@@ -169,6 +170,52 @@ async def test_check_status_401_refreshes_once_and_succeeds(monkeypatch, store):
         )
         res = await provider.check_payment_status(req.transaction_id)
         assert res.status == PaymentStatus.SUCCESSFUL
+    finally:
+        await provider.aclose()
+
+
+@respx.mock
+async def test_check_status_retries_on_5xx_then_succeeds(monkeypatch, store):
+    """A transient 5xx on an idempotent GET is retried, then succeeds."""
+    settings = _settings(monkeypatch)
+    respx.post(TOKEN_URL).mock(return_value=_token())
+    respx.post(RTP_URL).mock(return_value=httpx.Response(202))
+    provider = MTNProvider(settings=settings, store=store)
+    try:
+        req = await provider.request_payment(msisdn="46733123453", amount=5, currency="EUR")
+        status_url = f"{BASE}/collection/v1_0/requesttopay/{req.transaction_id}"
+        route = respx.get(status_url).mock(
+            side_effect=[
+                httpx.Response(503),  # transient, retried
+                httpx.Response(200, json={"status": "SUCCESSFUL"}),
+            ]
+        )
+        res = await provider.check_payment_status(req.transaction_id)
+        assert res.status == PaymentStatus.SUCCESSFUL
+        assert route.call_count == 2  # one retry happened
+    finally:
+        await provider.aclose()
+
+
+@respx.mock
+async def test_check_status_retries_on_network_error(monkeypatch, store):
+    """A network error on an idempotent GET is retried."""
+    settings = _settings(monkeypatch)
+    respx.post(TOKEN_URL).mock(return_value=_token())
+    respx.post(RTP_URL).mock(return_value=httpx.Response(202))
+    provider = MTNProvider(settings=settings, store=store)
+    try:
+        req = await provider.request_payment(msisdn="46733123453", amount=5, currency="EUR")
+        status_url = f"{BASE}/collection/v1_0/requesttopay/{req.transaction_id}"
+        route = respx.get(status_url).mock(
+            side_effect=[
+                httpx.ConnectError("boom"),  # transient, retried
+                httpx.Response(200, json={"status": "SUCCESSFUL"}),
+            ]
+        )
+        res = await provider.check_payment_status(req.transaction_id)
+        assert res.status == PaymentStatus.SUCCESSFUL
+        assert route.call_count == 2
     finally:
         await provider.aclose()
 

@@ -24,7 +24,7 @@ def main() -> int:
         # Touch the DB to confirm it is readable/writable.
         store.daily_usage()
         store.close()
-    except Exception as exc:  # noqa: BLE001 - healthcheck reports any failure
+    except Exception as exc:  # healthcheck reports any failure as unhealthy
         print(f"unhealthy: {exc}", file=sys.stderr)
         return 1
     print("healthy")

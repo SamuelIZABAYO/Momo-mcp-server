@@ -45,6 +45,11 @@ log = get_logger("mtn")
 # Approval code time-to-live in minutes.
 _APPROVAL_TTL_MIN = 15
 
+# Transient-failure retry budget for idempotent calls (5xx and network errors).
+# Total attempts = _MAX_RETRIES + 1. Backoff is _RETRY_BACKOFF_BASE * 2**(n-1).
+_MAX_RETRIES = 2
+_RETRY_BACKOFF_BASE = 0.5
+
 # Map MTN's raw (status, reason) onto our normalized PaymentStatus (GOTCHAS).
 _REASON_TO_STATUS = {
     "APPROVAL_REJECTED": PaymentStatus.REJECTED,
@@ -113,7 +118,7 @@ class MTNProvider(PaymentProvider):
             return self._disbursement_tokens, self._settings.disbursement_subscription_key
         raise ValueError(f"unknown product {product!r}")
 
-    # ── shared request helper: rate limit + 401-retry-once ────────────
+    # ── shared request helper: rate limit, 401-retry-once, transient retry ────
     async def _authed_request(
         self,
         method: str,
@@ -123,7 +128,6 @@ class MTNProvider(PaymentProvider):
         extra_headers: dict[str, str] | None = None,
         json_body: dict | None = None,
     ) -> httpx.Response:
-        await self._bucket.acquire()
         tokens, sub_key = self._product_ctx(product)
         url = f"{self._settings.base_url}{path}"
 
@@ -140,15 +144,49 @@ class MTNProvider(PaymentProvider):
             self._last_latency_ms = int((time.monotonic() - t0) * 1000)
             return resp
 
-        token = await tokens.get_token()
-        resp = await _do(token)
-        if resp.status_code == 401:
-            # Refresh once, retry once, never loop.
-            log.info("401 received; forcing token refresh and retrying once",
-                     extra={"path": path})
-            token = await tokens.get_token(force_refresh=True)
-            resp = await _do(token)
-        return resp
+        # Retry transient failures only for idempotent calls: GETs, and mutations
+        # that carry an X-Reference-Id (MTN dedupes on it, so a resend is safe).
+        idempotent = method.upper() == "GET" or (
+            extra_headers is not None and "X-Reference-Id" in extra_headers
+        )
+        attempts = _MAX_RETRIES + 1 if idempotent else 1
+
+        last_exc: httpx.HTTPError | None = None
+        for attempt in range(attempts):
+            if attempt:
+                await asyncio.sleep(_RETRY_BACKOFF_BASE * (2 ** (attempt - 1)))
+            await self._bucket.acquire()
+            try:
+                token = await tokens.get_token()
+                resp = await _do(token)
+            except httpx.HTTPError as exc:
+                # Network error / timeout: retry if budget remains, else surface.
+                last_exc = exc
+                if attempt + 1 < attempts:
+                    log.info("transient network error; retrying",
+                             extra={"path": path, "attempt": attempt + 1})
+                    continue
+                raise
+
+            if resp.status_code == 401:
+                # Refresh the token once and retry this attempt, never loop.
+                log.info("401 received; forcing token refresh and retrying once",
+                         extra={"path": path})
+                await self._bucket.acquire()
+                token = await tokens.get_token(force_refresh=True)
+                resp = await _do(token)
+
+            # Retry on a 5xx for idempotent calls; otherwise return as-is.
+            if resp.status_code >= 500 and attempt + 1 < attempts:
+                log.info("upstream 5xx; retrying",
+                         extra={"path": path, "status": resp.status_code, "attempt": attempt + 1})
+                continue
+            return resp
+
+        # The loop returns or raises on every path; this is a fallback only.
+        if last_exc is not None:
+            raise last_exc
+        raise ProviderError(f"request to {path} failed after retries.")
 
     # ── request_payment (Collections requesttopay) ───────────────────────────
     async def request_payment(
@@ -179,7 +217,7 @@ class MTNProvider(PaymentProvider):
             note=note,
         )
 
-        # 3) DRY_RUN: zero HTTP calls, realistic simulated response.
+        # 3) DRY_RUN: zero HTTP calls, simulated response.
         if self._settings.dry_run:
             log.info("dry-run request_payment", extra={"msisdn": mask_msisdn(msisdn)})
             return PaymentResult(
@@ -242,9 +280,8 @@ class MTNProvider(PaymentProvider):
             )
 
         if tx.dry_run:
-            # Deterministic simulated resolution from the fixture mapping is the
-            # job of tests; here dry-run resolves to SUCCESSFUL and is persisted
-            # with the ledger row flagged dry_run.
+            # In dry-run, a status check resolves the transaction to SUCCESSFUL
+            # and persists it, with the ledger row flagged dry_run.
             self._store.update_status(transaction_id, "SUCCESSFUL")
             return PaymentResult(
                 transaction_id=transaction_id,

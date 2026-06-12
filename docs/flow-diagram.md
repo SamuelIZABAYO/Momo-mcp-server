@@ -8,7 +8,7 @@ reconciliation), not just the happy path.
 ```mermaid
 sequenceDiagram
     autonumber
-    participant Agent as MCP Client (LLM)
+    participant Agent as MCP Client
     participant Srv as MoMo MCP Server
     participant DB as SQLite ledger
     participant MTN as MTN MoMo Sandbox
@@ -68,7 +68,7 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     autonumber
-    participant Agent as MCP Client (LLM)
+    participant Agent as MCP Client
     participant Srv as MoMo MCP Server
     participant Human
     participant MTN as MTN MoMo

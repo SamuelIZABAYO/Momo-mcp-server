@@ -17,6 +17,7 @@ _ENV = {
     "MOMO_COLLECTION_SUBSCRIPTION_KEY": "a" * 32,
     "MOMO_DISBURSEMENT_SUBSCRIPTION_KEY": "b" * 32,
     "MOMO_BASE_URL": "https://sandbox.momodeveloper.mtn.com",
+    "MOMO_CALLBACK_HOST": "https://callback.example",
     "MOMO_API_USER": "11111111-1111-1111-1111-111111111111",
     "MOMO_API_KEY": "k" * 16,
     "MSISDN_ALLOWLIST": "46733123453",
@@ -46,8 +47,9 @@ async def test_all_tools_discoverable():
     assert names == {
         "request_payment", "check_payment_status", "send_payout", "confirm_payout",
         "get_balance", "validate_account", "list_transactions", "get_provider_health",
+        "list_audit",
     }
-    # Each tool has a non-trivial, LLM-facing description.
+    # Each tool has a non-trivial client-facing description.
     for t in tools:
         assert t.description and len(t.description) > 40
 
@@ -103,3 +105,23 @@ async def test_ledger_resource(ctx):
     rows = json.loads(payload)
     assert isinstance(rows, list)
     assert rows and rows[0]["kind"] == "collection"
+
+
+async def test_list_audit_tool(ctx):
+    await server.request_payment(msisdn="46733123453", amount=5)
+    res = await server.list_audit()
+    assert res["ok"] is True
+    assert res["count"] >= 1
+    row = res["audit"][0]
+    assert row["tool"] == "request_payment"
+    # Audit rows carry a hash, not raw inputs.
+    assert "msisdn" not in row and "amount" not in row
+    assert "input_hash" in row
+
+
+async def test_audit_resource(ctx):
+    await server.request_payment(msisdn="46733123453", amount=5)
+    payload = server.recent_audit_resource()
+    rows = json.loads(payload)
+    assert isinstance(rows, list)
+    assert rows and rows[0]["tool"] == "request_payment"

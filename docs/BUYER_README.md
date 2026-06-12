@@ -77,8 +77,7 @@ is a separate piece of work:
   client, since every business's infrastructure differs.
 - Push notifications from MTN (webhooks). Today the system polls for results.
   Live deployments can add push for lower latency.
-- Other providers (Airtel Money, etc.). The system is built so adding one is a
-  contained job; the safety controls and tools stay the same.
+- Other providers. The current implementation is MTN-only.
 
 ---
 
