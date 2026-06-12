@@ -1,7 +1,7 @@
-"""Client-side token-bucket rate limiter (spec §4.5).
+"""Client-side token-bucket rate limiter.
 
 MTN's sandbox throttles aggressively; we self-limit to stay under it. Simple,
-async, single-process — refills continuously at ``rate`` tokens/sec up to a
+async, single-process, refills continuously at ``rate`` tokens/sec up to a
 burst of ``rate``.
 """
 

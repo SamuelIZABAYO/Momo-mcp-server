@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""One-time sandbox provisioning: create an MTN API user + API key (spec §3.1).
+"""One-time sandbox provisioning: create an MTN API user + API key.
 
-Flow (verify against momodeveloper.mtn.com before relying on it — Hard Rule #1):
+Flow (verify against momodeveloper.mtn.com before relying on it):
   1. POST {BASE}/v1_0/apiuser
         headers: X-Reference-Id: <uuid4>, Ocp-Apim-Subscription-Key: <collection key>
         body:    {"providerCallbackHost": "<host>"}
@@ -12,8 +12,8 @@ Flow (verify against momodeveloper.mtn.com before relying on it — Hard Rule #1
 
 This script is interactive and side-effecting against the sandbox, so it is NOT
 run in CI and NOT imported by the server. It prints the resulting credentials
-and the exact .env lines to paste — it never writes .env itself, so secrets are
-never committed (Hard Rule #2). Run it once, by hand, after subscription keys
+and the exact .env lines to paste, it never writes .env itself, so secrets are
+never committed. Run it once, by hand, after subscription keys
 are in your .env.
 
 Usage:
@@ -56,7 +56,7 @@ def provision() -> int:
     print(f"Provisioning sandbox API user against {base} …")
     try:
         with httpx.Client(timeout=10.0) as client:
-            # Step 1 — create API user.
+            # Step 1, create API user.
             r1 = client.post(f"{base}/v1_0/apiuser", headers=headers, json=body)
             if r1.status_code not in (201, 200):
                 print(
@@ -68,7 +68,7 @@ def provision() -> int:
                 )
                 return 1
 
-            # Step 2 — generate the API key for that user.
+            # Step 2, generate the API key for that user.
             r2 = client.post(
                 f"{base}/v1_0/apiuser/{api_user}/apikey",
                 headers={"Ocp-Apim-Subscription-Key": sub_key},
@@ -89,7 +89,7 @@ def provision() -> int:
         print("Unexpected: apikey response had no 'apiKey' field.", file=sys.stderr)
         return 1
 
-    # Print instructions only — never write .env (Hard Rule #2).
+    # Print instructions only, never write .env.
     print("\n✅ Provisioning succeeded. Add these lines to your .env:\n")
     print(f"MOMO_API_USER={api_user}")
     print(f"MOMO_API_KEY={api_key}")

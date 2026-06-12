@@ -1,4 +1,4 @@
-"""Structured JSON logging with redaction of secrets and MSISDNs (spec §4.2, §4.4).
+"""Structured JSON logging with redaction of secrets and MSISDNs.
 
 No raw subscription keys, API keys, bearer tokens, or full MSISDNs ever reach a
 log line. MSISDNs are masked to last-4; anything that looks like a key/token is
@@ -13,8 +13,8 @@ import re
 import sys
 from datetime import UTC, datetime
 
-# Patterns that must never appear verbatim in logs. Conservative on purpose:
-# better to over-redact a log line than to leak a credential (Hard Rule #2).
+# Patterns that must never appear verbatim in logs. Intentionally broad:
+# better to over-redact a log line than to leak a credential.
 _REDACTION_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     # Bearer tokens
     (re.compile(r"Bearer\s+[A-Za-z0-9._\-]+", re.IGNORECASE), "Bearer <redacted>"),

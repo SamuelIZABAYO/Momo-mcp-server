@@ -1,4 +1,4 @@
-"""Token caching, proactive refresh, and the 401-retry-once path — all mocked."""
+"""Token caching, proactive refresh, and the 401-retry-once path, all mocked."""
 
 from __future__ import annotations
 

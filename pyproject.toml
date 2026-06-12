@@ -1,7 +1,7 @@
 [project]
 name = "momo-mcp-server"
 version = "0.1.0"
-description = "Safety-first, production-grade MTN Mobile Money (sandbox) MCP server."
+description = "MTN Mobile Money (sandbox) MCP server with approval gates, spend limits, and an audit log."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }

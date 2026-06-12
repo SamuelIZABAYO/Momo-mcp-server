@@ -26,7 +26,7 @@ jobs:
         # so CI is reproducible; `uv run` then executes tools inside that venv.
         run: uv sync --extra dev
 
-      - name: Secret scan (no committed keys — Hard Rule #2)
+      - name: Secret scan (no committed keys)
         run: bash scripts/check_secrets.sh
 
       - name: Lint (ruff)
@@ -55,7 +55,7 @@ jobs:
           provenance: false
           tags: momo-mcp-server:ci
 
-      - name: Fail build if secrets are baked into the image (§4.8)
+      - name: Fail build if secrets are baked into the image
         run: |
           set -euo pipefail
           # The real risk is an accidental `COPY .env` (or a key embedded in a

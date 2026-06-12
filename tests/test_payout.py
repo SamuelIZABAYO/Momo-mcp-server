@@ -1,4 +1,4 @@
-"""Payout approval gate (§4.3) and its adversarial cases (seeds of §7.1):
+"""Payout approval gate and its adversarial cases (seeds of):
 no approval, forged/expired/replayed codes, amount/recipient mismatch."""
 
 from __future__ import annotations
@@ -55,7 +55,7 @@ async def test_payout_blocked_without_approval(monkeypatch, store):
         assert res.pending_approval is True
         assert res.approval_code
         assert res.transaction_id is None
-        # No transfer was sent — money did not move.
+        # No transfer was sent, money did not move.
         assert transfer.call_count == 0
     finally:
         await provider.aclose()
@@ -102,7 +102,7 @@ async def test_replayed_code_rejected(monkeypatch, store):
         pending = await provider.send_payout(msisdn="46733123453", amount=10, currency="EUR")
         # First use succeeds.
         await provider.confirm_payout(pending.approval_code)
-        # Replaying the same code must fail (single-use, §7.1).
+        # Replaying the same code must fail (single-use).
         with pytest.raises(GuardrailRejection) as exc:
             await provider.confirm_payout(pending.approval_code)
         assert exc.value.reason_code == "approval_invalid"

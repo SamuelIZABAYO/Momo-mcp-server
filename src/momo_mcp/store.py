@@ -1,24 +1,24 @@
 """SQLite persistence: transaction ledger, idempotency keys, audit log.
 
-Integrity guarantees this module is responsible for (spec §4.1, §4.2):
+Integrity guarantees this module is responsible for:
 
-  * **Persisted-before-send idempotency** — :meth:`Store.create_transaction`
+  * **Persisted-before-send idempotency**, :meth:`Store.create_transaction`
     writes a row in state ``PENDING`` with a unique ``reference_id`` *before*
     any HTTP call is made. A crash between write and send leaves a recoverable
     ``PENDING`` row; :meth:`Store.pending_transactions` lists them for
     startup reconciliation. The provider reuses the stored ``reference_id`` on
     retry, so MTN dedupes the request and no double charge occurs.
 
-  * **Append-only audit** — :meth:`Store.record_audit` only ever inserts. Every
+  * **Append-only audit**, :meth:`Store.record_audit` only ever inserts. Every
     tool call lands one row. No raw amounts or MSISDNs are stored in the audit
-    table; the input is hashed and the MSISDN masked to last-4 (§4.2).
+    table; the input is hashed and the MSISDN masked to last-4.
 
-  * **Daily counters** — :meth:`Store.daily_usage` aggregates non-dry-run,
-    non-rejected mutations for the current UTC day, backing the spend limits in
-    §4.7. Counters "reset" implicitly by keying on UTC date.
+  * **Daily counters**, :meth:`Store.daily_usage` aggregates non-rejected
+    mutations for the current UTC day, backing the spend limits. Counters
+    "reset" implicitly by keying on UTC date.
 
 The schema is intentionally small and readable so a skeptical engineer can audit
-it (Hard Rule #6).
+it.
 """
 
 from __future__ import annotations
@@ -53,7 +53,7 @@ CREATE INDEX IF NOT EXISTS idx_tx_status  ON transactions(status);
 CREATE INDEX IF NOT EXISTS idx_tx_created ON transactions(created_at);
 CREATE INDEX IF NOT EXISTS idx_tx_msisdn  ON transactions(msisdn);
 
--- Append-only audit log. No raw amounts/MSISDNs (§4.2): input is hashed,
+-- Append-only audit log. No raw amounts/MSISDNs: input is hashed,
 -- amounts/MSISDNs are not stored here at all.
 CREATE TABLE IF NOT EXISTS audit (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -66,7 +66,7 @@ CREATE TABLE IF NOT EXISTS audit (
 );
 CREATE INDEX IF NOT EXISTS idx_audit_ts ON audit(ts);
 
--- One-time payout approval codes (§4.3). Single-use; replay is rejected.
+-- One-time payout approval codes. Single-use; replay is rejected.
 CREATE TABLE IF NOT EXISTS approvals (
     code         TEXT PRIMARY KEY,
     msisdn       TEXT NOT NULL,
@@ -77,7 +77,7 @@ CREATE TABLE IF NOT EXISTS approvals (
     consumed_at  TEXT                          -- NULL until used; set once, never reused
 );
 
--- Human-triggered daily-limit resets (§4.7). daily_usage only counts
+-- Human-triggered daily-limit resets. daily_usage only counts
 -- transactions created at/after the most recent reset, so a human running
 -- scripts/reset_limits.py clears a hard-stop without deleting ledger history.
 CREATE TABLE IF NOT EXISTS limit_resets (
@@ -141,7 +141,7 @@ class DailyUsage:
 
 class Store:
     """Thin, explicit wrapper over a SQLite connection. Not thread-shared:
-    instantiate one per process; the server is single-process (spec §4.8)."""
+    instantiate one per process; the server is single-process."""
 
     def __init__(self, db_path: str | Path):
         self.db_path = Path(db_path)
@@ -184,10 +184,10 @@ class Store:
         external_ref: str | None = None,
         note: str | None = None,
     ) -> Transaction:
-        """Insert a PENDING transaction BEFORE any HTTP call (§4.1).
+        """Insert a PENDING transaction BEFORE any HTTP call.
 
         Raises :class:`sqlite3.IntegrityError` if ``reference_id`` already
-        exists — that is the idempotency guarantee surfacing, and callers should
+        exists, that is the idempotency guarantee surfacing, and callers should
         treat it as "already recorded, do not resend".
         """
         if kind not in ("collection", "disbursement"):
@@ -224,7 +224,7 @@ class Store:
         return Transaction.from_row(row) if row else None
 
     def pending_transactions(self) -> list[Transaction]:
-        """All PENDING rows — the startup reconciliation worklist (§4.1)."""
+        """All PENDING rows, the startup reconciliation worklist."""
         rows = self._conn.execute(
             "SELECT * FROM transactions WHERE status='PENDING' ORDER BY created_at"
         ).fetchall()
@@ -239,7 +239,7 @@ class Store:
         until: str | None = None,
         limit: int = 100,
     ) -> list[Transaction]:
-        """Ledger query — local store only, never the API (spec §2)."""
+        """Ledger query, local store only, never the API."""
         clauses: list[str] = []
         params: list[object] = []
         if status:
@@ -262,7 +262,7 @@ class Store:
         ).fetchall()
         return [Transaction.from_row(r) for r in rows]
 
-    # ── daily usage + limit resets (spend limits, §4.7) ──────────────────────
+    # ── daily usage + limit resets (spend limits) ──────────────────────
     def latest_reset_today(self, day: str | None = None) -> str | None:
         """The most recent limit-reset timestamp for the given UTC day, if any."""
         d = day or _utc_date()
@@ -279,12 +279,13 @@ class Store:
 
         ``include_dry_run`` defaults to True because the spend LIMITS are about
         agent *behavior*, not settlement: a guardrail must stop an oversized or
-        runaway spree even in DRY_RUN (the safe demo mode), so the safety
-        scorecard is truthful. Set it False to report real money actually moved.
+        runaway spree even in DRY_RUN (the safe simulation mode), so safety
+        checks cover the default operating mode. Set it False to report real
+        money actually moved.
 
         Only counts transactions created at/after the most recent limit reset for
         that day, so a human running scripts/reset_limits.py clears a hard-stop
-        without erasing ledger history (§4.7)."""
+        without erasing ledger history."""
         day = date or _utc_date()
         floor = self.latest_reset_today(day) or ""
         dry_clause = "" if include_dry_run else "AND dry_run=0"
@@ -308,7 +309,7 @@ class Store:
             )
         return ts
 
-    # ── audit (append-only, §4.2) ────────────────────────────────────────────
+    # ── audit (append-only) ────────────────────────────────────────────
     def record_audit(
         self,
         *,
@@ -330,7 +331,7 @@ class Store:
             "SELECT * FROM audit ORDER BY id DESC LIMIT ?", (limit,)
         ).fetchall()
 
-    # ── approvals (one-time payout codes, §4.3) ──────────────────────────────
+    # ── approvals (one-time payout codes) ──────────────────────────────
     def create_approval(
         self,
         *,
@@ -351,7 +352,7 @@ class Store:
         """Read-only lookup of an approval by code (no state change).
 
         Used to recover an approval's payee/amount/currency before executing it.
-        Does NOT consume the code — call :meth:`consume_approval` for that, which
+        Does NOT consume the code, call :meth:`consume_approval` for that, which
         is the single atomic consume point (replay-safe)."""
         return self._conn.execute(
             "SELECT * FROM approvals WHERE code=?", (code,)
@@ -361,7 +362,7 @@ class Store:
         """Atomically mark an approval consumed. Returns the row on success.
 
         Returns ``None`` if the code is unknown, already consumed (replay), or
-        expired — the caller maps that to a rejection (§7.1). The single UPDATE
+        expired, the caller maps that to a rejection. The single UPDATE
         with ``consumed_at IS NULL`` in the WHERE clause makes replay a no-op
         even under concurrency.
         """

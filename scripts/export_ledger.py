@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Accountant-friendly ledger export (spec §7.4).
+"""Accountant-friendly ledger export.
 
 Exports the transaction ledger to CSV (opens directly in Excel/Sheets) with a
 human-readable reconciliation status column. This is the small thing that turns

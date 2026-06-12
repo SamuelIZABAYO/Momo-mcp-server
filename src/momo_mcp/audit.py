@@ -1,11 +1,10 @@
-"""Audit helper — one append-only row per tool call (spec §4.2).
+"""Audit helper, one append-only row per tool call.
 
 The audit row records *that* a tool ran and how it turned out, never the raw
 amount or MSISDN: the input is hashed (so identical inputs are correlatable
-without storing them) and outcomes are coarse reason codes. This is the
-trust-signal trail a buyer's compliance team inspects, and it must hold even
-when a tool raises — so the recording happens in a ``finally``-style context
-manager regardless of success, rejection, or error.
+without storing them) and outcomes are coarse reason codes. This audit trail
+must hold even when a tool raises, so the recording happens in a
+``finally``-style context manager regardless of success, rejection, or error.
 """
 
 from __future__ import annotations
@@ -24,8 +23,8 @@ from .store import Store
 def hash_input(payload: dict[str, object]) -> str:
     """Stable SHA-256 of a tool's inputs (sorted keys), truncated for storage.
 
-    No raw values are persisted — only this digest — so identical calls are
-    correlatable in the audit log without leaking amounts/MSISDNs (§4.2)."""
+    No raw values are persisted, only this digest, so identical calls are
+    correlatable in the audit log without leaking amounts/MSISDNs."""
     blob = json.dumps(payload, sort_keys=True, default=str).encode()
     return hashlib.sha256(blob).hexdigest()[:32]
 
