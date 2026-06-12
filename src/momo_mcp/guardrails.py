@@ -3,8 +3,8 @@ Each check raises :class:`GuardrailRejection` with a reason code on breach;
 rejections are never retryable and the message tells the LLM to inform the user,
 not retry.
 
-Checks live here, decoupled from any provider, so the adversarial safety suite
-can exercise them directly and the same logic protects every provider.
+Checks live here, decoupled from any provider, so tests can exercise them
+directly and the same logic protects every provider.
 """
 
 from __future__ import annotations
@@ -35,8 +35,7 @@ def check_pause(workdir: str | Path = ".") -> None:
 
 
 def check_allowlist(msisdn: str, settings: Settings) -> None:
-    """In sandbox, refuse any MSISDN not on the allowlist, a hallucinated
-    number can never fire a request."""
+    """In sandbox, refuse any MSISDN not on the allowlist."""
     if settings.msisdn_allowlist and msisdn not in settings.msisdn_allowlist:
         raise GuardrailRejection(
             _inform(

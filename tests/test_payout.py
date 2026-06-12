@@ -1,4 +1,4 @@
-"""Payout approval gate and its adversarial cases (seeds of):
+"""Payout approval gate cases:
 no approval, forged/expired/replayed codes, amount/recipient mismatch."""
 
 from __future__ import annotations

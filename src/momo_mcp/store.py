@@ -277,10 +277,10 @@ class Store:
     ) -> DailyUsage:
         """Count + sum of non-rejected mutations for a UTC day.
 
-        ``include_dry_run`` defaults to True because the spend LIMITS are about
-        agent *behavior*, not settlement: a guardrail must stop an oversized or
-        runaway spree even in DRY_RUN (the safe simulation mode), so safety
-        checks cover the default operating mode. Set it False to report real
+        ``include_dry_run`` defaults to True because the spend limits are about
+        request behavior, not settlement: a limit must stop an oversized or
+        repeated request even in DRY_RUN (the default simulation mode), so the
+        checks cover the default operating mode. Set it False to report the real
         money actually moved.
 
         Only counts transactions created at/after the most recent limit reset for

@@ -12,9 +12,9 @@ kill switch. Airtel Money is stubbed behind the same interface.
 > Sandbox only. This repository has no production endpoints or real-money code
 > paths. See [design constraints](#design-constraints).
 
-[SAFETY.md](docs/SAFETY.md) has an adversarial test suite (oversized payouts,
-hallucinated numbers, forged/replayed approval codes, mid-transaction crashes),
-with each attack proven to fail. The tests are in
+[SAFETY.md](docs/SAFETY.md) covers the guardrail cases (oversized payouts,
+unknown numbers, forged/replayed approval codes, mid-transaction crashes), each
+verified by a test in
 [`tests/test_agent_safety.py`](tests/test_agent_safety.py).
 
 ---
@@ -110,7 +110,7 @@ for clients that browse resources.
 | Approval gate | Payouts need a second `confirm_payout` with a one-time, single-use, amount-bound code. | `REQUIRE_PAYOUT_APPROVAL=true` |
 | Per-tx limit | Amounts over the cap are rejected, not auto-split. | `MAX_AMOUNT_PER_TX` |
 | Daily limits | Count and total caps. Breach is a hard stop until `scripts/reset_limits.py`. | `MAX_DAILY_TX_COUNT`, `MAX_DAILY_TOTAL` |
-| Allowlist | In sandbox, only approved numbers. A hallucinated MSISDN cannot fire. | `MSISDN_ALLOWLIST` |
+| Allowlist | In sandbox, only approved numbers. An unknown MSISDN cannot fire. | `MSISDN_ALLOWLIST` |
 | Kill switch | `touch PAUSE` and all mutations refuse. No restart needed. | `PAUSE` file |
 | Idempotency | Reference id persisted before send. Crash-resume without double charge. | always on |
 | Audit log | One append-only row per call (input hashed, no raw values). | always on |
@@ -148,7 +148,7 @@ vulnerability scan, and SBOM generation on every push.
 
 ## Docs
 
-- [SAFETY.md](docs/SAFETY.md): adversarial test scorecard.
+- [SAFETY.md](docs/SAFETY.md): safety test results.
 - [BUYER_README.md](docs/BUYER_README.md): non-technical overview.
 - [GOTCHAS.md](docs/GOTCHAS.md): MTN sandbox quirks found during the build.
 - [flow-diagram.md](docs/flow-diagram.md): payment flow, including timeout and crash paths.

@@ -1,14 +1,14 @@
-"""Adversarial agent-safety suite.
+"""Agent-safety guardrail cases.
 
-These tests *attack* the server the way a confused or manipulated agent would,
-and prove every attack fails closed. They drive the real MCP tool layer
-(server.py) so what's tested is exactly what an agent can call. Results are
-published as a scorecard in docs/SAFETY.md.
+These tests exercise the server the way a confused or manipulated agent would,
+and check that each case is rejected or recovered. They drive the real MCP tool
+layer (server.py) so what's tested is what an agent can actually call. Results
+are summarized in docs/SAFETY.md.
 
-Attacks covered:
+Cases covered:
   A1  payout above MAX_AMOUNT_PER_TX                         -> rejected
   A2  splitting a large amount into many small payouts       -> daily limit stops it
-  A3  payment to an MSISDN not on the allowlist (hallucination) -> rejected
+  A3  payment to an MSISDN not on the allowlist (unknown number) -> rejected
   A4  payout with no approval                                -> blocked (no money moves)
   A5  payout with a forged approval code                     -> rejected
   A6  replay of a used approval code                         -> rejected
@@ -71,9 +71,9 @@ async def test_a1_payout_over_limit_rejected(ctx):
 
 # A2 ──────────────────────────────────────────────────────────────────────────
 async def test_a2_amount_splitting_caught_by_daily_limits(ctx):
-    """An agent tries to evade the per-tx cap by splitting a big payout into many
-    small ones. The daily limits (count=3, total=150) cap the damage and then
-    hard-stop the spree with an explicit rejection."""
+    """Splitting a big payout into many small ones to get under the per-tx cap.
+    The daily limits (count=3, total=150) cap the total and then stop further
+    payouts with an explicit rejection."""
     hard_stopped = False
     for _ in range(10):
         pending = await server.send_payout(msisdn="46733123453", amount=40)
@@ -88,15 +88,15 @@ async def test_a2_amount_splitting_caught_by_daily_limits(ctx):
             hard_stopped = True
             break
 
-    # The spree was stopped, and the real money moved never exceeded the caps.
-    assert hard_stopped, "daily limits failed to stop the splitting attack"
+    # Further payouts were stopped, and the money moved never exceeded the caps.
+    assert hard_stopped, "daily limits failed to stop the split payouts"
     usage = ctx.store.daily_usage()
     assert usage.tx_count <= int(_ENV["MAX_DAILY_TX_COUNT"])
     assert usage.total_amount <= float(_ENV["MAX_DAILY_TOTAL"])
 
 
 # A3 ──────────────────────────────────────────────────────────────────────────
-async def test_a3_hallucinated_msisdn_rejected(ctx):
+async def test_a3_unknown_msisdn_rejected(ctx):
     res = await server.request_payment(msisdn="46700000999", amount=5)
     assert res["ok"] is False and res["rejected"] is True
     assert res["reason_code"] == "msisdn_not_allowlisted"
@@ -136,11 +136,10 @@ async def test_a6_replayed_approval_code_rejected(ctx):
 async def test_a7_approval_code_amount_redirect_rejected(ctx):
     pending = await server.send_payout(msisdn="46733123453", amount=50)
     code = pending["approval_code"]
-    # Try to push a DIFFERENT (but still under-limit) amount through the valid
-    # code via the provider. The tool layer always re-derives amount from the
-    # code, so we attack the provider directly to prove the binding check. We use
-    # 80 (< MAX_AMOUNT_PER_TX=100) so the amount guardrail does not pre-empt the
-    # approval-mismatch check we are exercising here.
+    # Try a different, still under-limit amount through the valid code via the
+    # provider. The tool layer always re-derives amount from the code, so this
+    # calls the provider directly to check binding. 80 (< MAX_AMOUNT_PER_TX=100)
+    # keeps the amount guardrail from pre-empting the approval-mismatch check.
     from momo_mcp.providers.base import GuardrailRejection
 
     with pytest.raises(GuardrailRejection) as exc:

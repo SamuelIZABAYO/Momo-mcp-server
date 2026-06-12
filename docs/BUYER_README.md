@@ -2,9 +2,9 @@
 
 Written for a product or business owner, not an engineer. No code.
 
-You want customers to pay you with MTN Mobile Money (MoMo), and you want an AI
-assistant to request those payments and send payouts safely. This explains what
-that involves, what works today, and what production needs.
+You want customers to pay you with MTN Mobile Money (MoMo), and you want the
+payment tools to handle requests and payouts safely. This explains what that
+involves, what works today, and what production needs.
 
 ---
 
@@ -28,22 +28,23 @@ MTN's system, which is what this product does.
 
 ## What's safe about it
 
-Letting an AI move money is risky if nothing constrains it. This product is built
-so the AI cannot do anything dangerous, and you can check each claim:
+An assistant that can move money needs limits. Payment actions here are
+constrained, and you can check each constraint:
 
-- It can't send more than a set limit per transaction, or more than a daily cap.
+- No transaction above a set per-transaction limit, and no more than a daily cap.
   These are hard stops.
-- It can't pay a number you didn't approve. If the AI invents a phone number, the
-  request is refused.
-- It can't send a payout on its own. Every payout needs a second, human-approved
-  step. The AI asks; a person confirms.
+- No payment to a number you didn't approve. An invented or wrong number is
+  refused.
+- No payout on its own. Every payout needs a second, human-approved step. The
+  assistant requests it; a person confirms.
 - You can freeze it. Creating a file called `PAUSE` stops all money movement.
-- Everything is logged in an audit trail, and the transaction history exports to
+- Every call is logged in an audit trail, and the transaction history exports to
   a spreadsheet for reconciliation.
-- It runs in a "dry run" mode by default. It simulates everything with no real
-  money until you turn that off.
+- A "dry run" mode is on by default. It simulates everything with no real money
+  until you turn it off.
 
-Each of these has an automated test, summarized in [SAFETY.md](SAFETY.md).
+Each of these is covered by an automated test, summarized in
+[SAFETY.md](SAFETY.md).
 
 ---
 
@@ -67,16 +68,15 @@ a merchant account in Rwandan francs (RWF). The path and timeline are in
 
 ## Production additions
 
-This product is the agent-facing payment engine. The following are not included,
-and each is a separate piece of work:
+This server provides the payment tools. The following are not included, and each
+is a separate piece of work:
 
-- A website or dashboard. The AI assistant is the interface. A custom checkout
-  page or merchant dashboard is built per business.
+- A website or dashboard. A custom checkout page or merchant dashboard is built
+  per business.
 - Always-on hosting with security hardening (TLS, isolation, backups). Built per
   client, since every business's infrastructure differs.
-- Push notifications from MTN (webhooks). Today the system polls for results,
-  which is the dependable choice in sandbox. Live deployments can add push for
-  lower latency.
+- Push notifications from MTN (webhooks). Today the system polls for results.
+  Live deployments can add push for lower latency.
 - Other providers (Airtel Money, etc.). The system is built so adding one is a
   contained job; the safety controls and tools stay the same.
 
@@ -84,7 +84,7 @@ and each is a separate piece of work:
 
 ## Summary
 
-A way to let an AI assistant take MTN MoMo payments and send payouts, with
+The server lets an MCP client request MTN MoMo payments and payouts, with
 spending limits, a human approval step for payouts, a kill switch, and an audit
 trail, all covered by automated tests. It works against MTN's free sandbox today.
 Going live in Rwanda is a documented process (MTN approval, KYC, and a francs

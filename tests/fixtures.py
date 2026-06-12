@@ -26,6 +26,5 @@ MSISDN_TIMEOUT = "46733123452"
 # The sandbox allowlist mirrors these numbers (config MSISDN_ALLOWLIST default).
 SANDBOX_ALLOWLIST = tuple(SANDBOX_OUTCOMES.keys())
 
-# A number NOT on the allowlist, used to prove the guardrail
-# rejects hallucinated/unknown numbers.
+# A number not on the allowlist, used to check the guardrail rejection path.
 MSISDN_NOT_ALLOWLISTED = "46700000999"

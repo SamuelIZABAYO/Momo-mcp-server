@@ -2,8 +2,8 @@
 
 Run with:  pytest -m live
 Requires a valid .env (subscription keys + provisioned API user/key). Skipped
-automatically if config can't load. Exercises EVERY magic-number outcome so the
-reason→status normalization is proven against reality.
+automatically if config can't load. Exercises every magic-number outcome so the
+reason→status normalization is checked against the live sandbox.
 """
 
 from __future__ import annotations
