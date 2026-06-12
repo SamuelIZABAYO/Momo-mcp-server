@@ -3,7 +3,7 @@
 Every tool here delegates to the PaymentProvider (never MTN directly) and is
 wrapped in :func:`audit_call` so each invocation lands exactly one append-only
 audit row, including guardrail rejections and errors. Tool docstrings are
-written for an LLM consumer: they state preconditions and what to do next.
+written for MCP clients: they state preconditions and what to do next.
 
 Run:  momo-mcp-server         (console script)
   or  python -m momo_mcp.server
@@ -13,6 +13,7 @@ The server speaks MCP over stdio, so all human-readable logging goes to stderr
 
 from __future__ import annotations
 
+import json
 import sys
 from dataclasses import asdict
 from typing import Any
@@ -65,7 +66,7 @@ def _result(obj: Any) -> dict[str, Any]:
 
 
 def _error(exc: Exception) -> dict[str, Any]:
-    """Uniform, LLM-actionable error envelope (never leaks internals)."""
+    """Uniform client-facing error envelope (never leaks internals)."""
     if isinstance(exc, GuardrailRejection):
         return {"ok": False, "rejected": True, "reason_code": exc.reason_code, "message": str(exc)}
     if isinstance(exc, ProviderError):
@@ -77,7 +78,7 @@ def _error(exc: Exception) -> dict[str, Any]:
 # the provider call runs INSIDE the `audit_call` context so a GuardrailRejection
 # or ProviderError propagates to the audit wrapper and is recorded as
 # `rejected:<reason>` / `error:<type>`. We then catch it OUTSIDE the `with` to
-# convert it into the structured error envelope returned to the LLM. Catching
+# convert it into the structured error envelope returned to the client. Catching
 # inside the `with` would swallow the exception and mis-record the row as `ok`.
 
 
@@ -248,16 +249,34 @@ async def get_provider_health() -> dict[str, Any]:
         }
 
 
-# ── ledger exposed as an MCP resource (good-citizen) ───────────────────
+@mcp.tool()
+async def list_audit(limit: int = 50) -> dict[str, Any]:
+    """Read the append-only audit log: one row per tool call, with the tool name,
+    a hash of the inputs (no raw amounts or MSISDNs), the outcome
+    (ok / rejected:<reason> / error:<type>), and latency. Use this to review what
+    was attempted, including rejected and failed calls.
+    """
+    ctx = _app()
+    rows = ctx.store.recent_audit(limit=limit)
+    return {"ok": True, "count": len(rows), "audit": [dict(r) for r in rows]}
+
+
+# Ledger and audit log exposed as MCP resources, readable by clients that browse
+# resources without invoking a tool.
 @mcp.resource("ledger://transactions/recent")
 def recent_ledger() -> str:
-    """The 100 most recent ledger transactions as JSON, readable by MCP clients
-    that browse resources (e.g. Glama), without invoking a tool."""
-    import json
-
+    """The 100 most recent ledger transactions as JSON."""
     ctx = _app()
     rows = ctx.store.list_transactions(limit=100)
     return json.dumps([asdict(r) for r in rows], indent=2, default=str)
+
+
+@mcp.resource("audit://recent")
+def recent_audit_resource() -> str:
+    """The 100 most recent audit-log rows as JSON."""
+    ctx = _app()
+    rows = ctx.store.recent_audit(limit=100)
+    return json.dumps([dict(r) for r in rows], indent=2, default=str)
 
 
 def main() -> int:

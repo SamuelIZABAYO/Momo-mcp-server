@@ -23,7 +23,6 @@ _SECRET_FIELDS = frozenset(
     {
         "collection_subscription_key",
         "disbursement_subscription_key",
-        "remittance_subscription_key",
         "api_user",
         "api_key",
     }
@@ -52,7 +51,6 @@ _SECRET_ENV = frozenset(
     {
         "MOMO_COLLECTION_SUBSCRIPTION_KEY",
         "MOMO_DISBURSEMENT_SUBSCRIPTION_KEY",
-        "MOMO_REMITTANCE_SUBSCRIPTION_KEY",
         "MOMO_API_USER",
         "MOMO_API_KEY",
     }
@@ -110,8 +108,6 @@ class Settings:
     # Subscription keys
     collection_subscription_key: str
     disbursement_subscription_key: str
-    remittance_subscription_key: str | None
-
     # Provisioned API credentials (may be unset before scripts/provision.py runs)
     api_user: str | None
     api_key: str | None
@@ -224,16 +220,22 @@ def load_settings(env_file: str | os.PathLike[str] | None = ".env") -> Settings:
     )
 
     db_path = Path(_get("MOMO_DB_PATH") or "./data/momo.sqlite3")
+    callback_host = _get("MOMO_CALLBACK_HOST")
+    if not callback_host:
+        raise ConfigError("MOMO_CALLBACK_HOST is required and must be an https:// URL.")
+    if not callback_host.startswith("https://"):
+        raise ConfigError(
+            f"MOMO_CALLBACK_HOST must be an https:// URL, got {callback_host!r}."
+        )
 
     return Settings(
         collection_subscription_key=_get("MOMO_COLLECTION_SUBSCRIPTION_KEY"),  # type: ignore[arg-type]
         disbursement_subscription_key=_get("MOMO_DISBURSEMENT_SUBSCRIPTION_KEY"),  # type: ignore[arg-type]
-        remittance_subscription_key=_get("MOMO_REMITTANCE_SUBSCRIPTION_KEY"),
         api_user=_get("MOMO_API_USER"),
         api_key=_get("MOMO_API_KEY"),
         target_env=target_env,
         base_url=base_url,
-        callback_host=(_get("MOMO_CALLBACK_HOST") or "https://example.com"),
+        callback_host=callback_host,
         currency=currency,
         dry_run=_get_bool("DRY_RUN", True),
         require_payout_approval=_get_bool("REQUIRE_PAYOUT_APPROVAL", True),

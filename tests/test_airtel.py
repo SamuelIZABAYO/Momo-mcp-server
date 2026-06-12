@@ -1,4 +1,4 @@
-"""Airtel stub: interface ready, every method gives a clean not-implemented msg."""
+"""Airtel stub: implements the interface; every method reports not-implemented."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ def test_airtel_implements_interface():
     assert issubclass(AirtelProvider, PaymentProvider)
 
 
-async def test_methods_raise_clean_not_implemented():
+async def test_methods_raise_not_implemented():
     p = AirtelProvider()
     for call in (
         p.request_payment(msisdn="1", amount=1, currency="EUR"),
@@ -22,7 +22,7 @@ async def test_methods_raise_clean_not_implemented():
         p.send_payout(msisdn="1", amount=1, currency="EUR"),
         p.confirm_payout("code"),
     ):
-        with pytest.raises(NotImplementedError, match="not implemented in v1"):
+        with pytest.raises(NotImplementedError, match="not implemented"):
             await call
 
 

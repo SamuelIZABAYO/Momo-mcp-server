@@ -12,6 +12,7 @@ _VALID = {
     "MOMO_DISBURSEMENT_SUBSCRIPTION_KEY": "b" * 32,
     "MOMO_TARGET_ENV": "sandbox",
     "MOMO_BASE_URL": "https://sandbox.momodeveloper.mtn.com",
+    "MOMO_CALLBACK_HOST": "https://callback.example",
 }
 
 
@@ -19,8 +20,8 @@ def _apply(monkeypatch, env: dict[str, str], *, clear: list[str] | None = None):
     # Clear anything that might leak in from a real .env / CI env.
     for key in [
         "MOMO_COLLECTION_SUBSCRIPTION_KEY", "MOMO_DISBURSEMENT_SUBSCRIPTION_KEY",
-        "MOMO_REMITTANCE_SUBSCRIPTION_KEY", "MOMO_API_USER", "MOMO_API_KEY",
-        "MOMO_TARGET_ENV", "MOMO_BASE_URL", "MOMO_CURRENCY", "DRY_RUN",
+        "MOMO_API_USER", "MOMO_API_KEY",
+        "MOMO_TARGET_ENV", "MOMO_BASE_URL", "MOMO_CALLBACK_HOST", "MOMO_CURRENCY", "DRY_RUN",
         "REQUIRE_PAYOUT_APPROVAL", "MAX_AMOUNT_PER_TX", "MAX_DAILY_TX_COUNT",
         "MAX_DAILY_TOTAL", "MSISDN_ALLOWLIST", "RATE_LIMIT_PER_SEC", "MOMO_DB_PATH",
     ]:
@@ -61,6 +62,18 @@ def test_non_sandbox_base_url_rejected(monkeypatch):
 def test_http_base_url_rejected(monkeypatch):
     _apply(monkeypatch, {**_VALID, "MOMO_BASE_URL": "http://sandbox.momodeveloper.mtn.com"})
     with pytest.raises(ConfigError, match="https"):
+        load_settings(env_file=None)
+
+
+def test_missing_callback_host_rejected(monkeypatch):
+    _apply(monkeypatch, _VALID, clear=["MOMO_CALLBACK_HOST"])
+    with pytest.raises(ConfigError, match="MOMO_CALLBACK_HOST"):
+        load_settings(env_file=None)
+
+
+def test_http_callback_host_rejected(monkeypatch):
+    _apply(monkeypatch, {**_VALID, "MOMO_CALLBACK_HOST": "http://callback.example"})
+    with pytest.raises(ConfigError, match="MOMO_CALLBACK_HOST"):
         load_settings(env_file=None)
 
 

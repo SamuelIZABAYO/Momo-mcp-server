@@ -1,10 +1,9 @@
-"""Airtel Money provider, stub.
+"""Airtel Money provider (stub).
 
-The interface is ready; the implementation is not. Every method raises a clear,
-LLM-actionable ``NotImplementedError`` so a misconfiguration surfaces as a
-readable message rather than an AttributeError. Implementing Airtel for real is
-one file's worth of work against the same :class:`PaymentProvider` contract,
-with zero tool changes, that is the architectural payoff of.
+The interface is in place; the implementation is not. Every method raises a clear
+NotImplementedError so a misconfiguration surfaces as a readable message rather
+than an AttributeError. Implementing Airtel is one file against the same
+:class:`PaymentProvider` contract, with no tool changes.
 """
 
 from __future__ import annotations
@@ -19,9 +18,8 @@ from .base import (
 )
 
 _MSG = (
-    "Airtel Money is not implemented in v1. The provider interface is ready; "
-    "implementing it is a separate engagement (see docs/ roadmap). "
-    "Use the MTN provider for sandbox operations."
+    "Airtel Money is not implemented. The provider interface is in place; "
+    "use the MTN provider for sandbox operations."
 )
 
 

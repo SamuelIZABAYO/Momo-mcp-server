@@ -1,11 +1,8 @@
-"""The ``PaymentProvider`` abstract interface, the seam that makes this server
-provider-agnostic.
+"""The ``PaymentProvider`` abstract interface.
 
 MCP tools depend only on this interface and on the structured result objects
-below. MTN is the one concrete implementation in v1; Airtel ships as a stub
-implementing the same contract. The provider layer is also where agent
-guardrails are enforced so no tool can bypass them, that enforcement
-lands with the MTN implementation in/3; this file defines the shapes.
+below. The provider layer is also where guardrails are enforced so no tool can
+bypass them.
 """
 
 from __future__ import annotations
@@ -32,9 +29,9 @@ class PaymentResult:
 
     transaction_id: str          # internal reference_id (the X-Reference-Id)
     status: PaymentStatus
-    message: str                 # human-readable, LLM-actionable
+    message: str                 # client-facing message
     dry_run: bool = False
-    raw_status: str | None = None  # provider's own status string, for debugging
+    raw_status: str | None = None  # provider's own status string
 
 
 @dataclass(frozen=True)
@@ -77,7 +74,7 @@ class ProviderHealth:
 
 class ProviderError(RuntimeError):
     """Base for provider-level failures. ``message`` is safe to surface to the
-    LLM and should tell it what to do next."""
+    client and should tell it what to do next."""
 
     def __init__(self, message: str, *, retryable: bool = False):
         super().__init__(message)
@@ -85,7 +82,7 @@ class ProviderError(RuntimeError):
 
 
 class GuardrailRejection(ProviderError):
-    """A guardrail blocked the action. Never retryable, the LLM must
+    """A guardrail blocked the action. Never retryable, the client must
     inform the user, not retry. Carries a ``reason_code`` for the audit log."""
 
     def __init__(self, message: str, *, reason_code: str):

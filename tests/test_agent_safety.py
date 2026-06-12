@@ -32,6 +32,7 @@ _ENV = {
     "MOMO_COLLECTION_SUBSCRIPTION_KEY": "a" * 32,
     "MOMO_DISBURSEMENT_SUBSCRIPTION_KEY": "b" * 32,
     "MOMO_BASE_URL": "https://sandbox.momodeveloper.mtn.com",
+    "MOMO_CALLBACK_HOST": "https://callback.example",
     "MOMO_API_USER": "11111111-1111-1111-1111-111111111111",
     "MOMO_API_KEY": "k" * 16,
     "MSISDN_ALLOWLIST": "46733123453,46733123451",

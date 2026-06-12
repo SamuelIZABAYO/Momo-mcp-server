@@ -19,6 +19,7 @@ _ENV = {
     "MOMO_COLLECTION_SUBSCRIPTION_KEY": "a" * 32,
     "MOMO_DISBURSEMENT_SUBSCRIPTION_KEY": "b" * 32,
     "MOMO_BASE_URL": "https://sandbox.momodeveloper.mtn.com",
+    "MOMO_CALLBACK_HOST": "https://callback.example",
     "MAX_AMOUNT_PER_TX": "100",
     "MAX_DAILY_TX_COUNT": "3",
     "MAX_DAILY_TOTAL": "150",

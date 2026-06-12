@@ -96,7 +96,7 @@ class TokenManager:
         }
         resp = await self._client.post(url, headers=headers)
         if resp.status_code != 200:
-            # Message is LLM-actionable: point at the likely cause.
+            # Point at the likely cause; the message is safe to return.
             raise AuthError(
                 f"Token request for {self._product} failed (HTTP {resp.status_code}). "
                 "Check the subscription key and that the API user/key were provisioned "
@@ -118,4 +118,4 @@ class TokenManager:
 
 
 class AuthError(RuntimeError):
-    """Token acquisition failed. Message is safe to surface to the LLM."""
+    """Token acquisition failed. Message is safe to surface to the client."""

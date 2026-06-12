@@ -7,7 +7,7 @@
 An [MCP](https://modelcontextprotocol.io) server for MTN Mobile Money (sandbox).
 It exposes MoMo payment operations as tools an MCP client (Claude, Cursor, etc.)
 can call, with approval gates, spend limits, idempotency, an audit log, and a
-kill switch. Airtel Money is stubbed behind the same interface.
+kill switch.
 
 > Sandbox only. This repository has no production endpoints or real-money code
 > paths. See [design constraints](#design-constraints).
@@ -26,7 +26,8 @@ Prerequisites: [Docker](https://docs.docker.com/get-docker/) or Python 3.11+.
 1. Register at [momodeveloper.mtn.com](https://momodeveloper.mtn.com) (free).
 2. Subscribe to Collections and Disbursements. Copy each product's primary key
    (`Ocp-Apim-Subscription-Key`).
-3. `cp .env.example .env` and paste the two keys in. Keep values free of inline
+3. `cp .env.example .env`, paste the two keys in, and set
+   `MOMO_CALLBACK_HOST` to an HTTPS callback host. Keep values free of inline
    `#` comments (see the note in `.env.example`).
 4. Install:
    ```bash
@@ -96,9 +97,11 @@ Build the image yourself: `docker build -t momo-mcp-server .`
 | `validate_account` | Check whether an MSISDN is active (unreliable in sandbox; see GOTCHAS). |
 | `list_transactions` | Query the local SQLite ledger. Never calls the API. |
 | `get_provider_health` | Token validity, latency, daily usage vs. limits. |
+| `list_audit` | Read the append-only audit log (tool, input hash, outcome, latency). |
 
-The ledger is also exposed as an MCP resource (`ledger://transactions/recent`)
-for clients that browse resources.
+The ledger and the audit log are also exposed as MCP resources
+(`ledger://transactions/recent` and `audit://recent`) for clients that browse
+resources.
 
 ---
 
@@ -121,7 +124,11 @@ These are covered by the tests in [SAFETY.md](docs/SAFETY.md).
 
 ## Timeout and retry policy
 
-- HTTP timeout 10s. Idempotent retries: max 2, exponential.
+- HTTP timeout 10s.
+- Transient failures (5xx and network errors) are retried for idempotent calls
+  only: GETs, and mutations that carry an `X-Reference-Id` (MTN dedupes on it).
+  Max 2 retries, exponential backoff (0.5s, 1s). Non-idempotent calls are not
+  retried.
 - Token cached, refreshed at 80% of its 1h lifetime. On a 401, refresh once and
   retry once, then stop.
 - `check_payment_status` polls with backoff (2/4/8/16/30s, ~60s cap) and does
@@ -159,11 +166,11 @@ vulnerability scan, and SBOM generation on every push.
 ## Architecture
 
 MCP tools never call MTN directly. They call the `PaymentProvider` interface
-([`providers/base.py`](src/momo_mcp/providers/base.py)). MTN is the one concrete
-implementation; Airtel is a stub. Adding a provider is one new file with no tool
-changes. Guardrails run in the provider layer so no tool can bypass them. See
-[BUYER_README](docs/BUYER_README.md#production-additions) for what is not built
-in v1.
+([`providers/base.py`](src/momo_mcp/providers/base.py)). MTN is the concrete
+implementation; Airtel is a stub on the same contract. Adding a provider is one
+new file with no tool changes. Guardrails run in the provider layer so no tool
+can bypass them. See [BUYER_README](docs/BUYER_README.md#production-additions) for
+what is not built in v1.
 
 ---
 
