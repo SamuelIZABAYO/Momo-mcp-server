@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Fail if anything that looks like a committed secret is in the tracked tree
-# (spec §4.4, Hard Rule #2). Run in CI on every push and locally pre-commit.
+# Run in CI on every push and locally pre-commit.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -14,7 +14,7 @@ if git ls-files --error-unmatch .env >/dev/null 2>&1; then
 fi
 
 # 2) Grep tracked files for secret-shaped assignments with a real value.
-#    Allow empty assignments (KEY=) and the .env.example placeholders.
+#    Allow empty assignments (KEY=) and the .env.example values.
 #    Patterns: non-empty MOMO_*_KEY / API key assignments to a literal value.
 #    Excludes f-string interpolations (={var}) — those print runtime values,
 #    not committed secrets — and the example/scanner/docs files.

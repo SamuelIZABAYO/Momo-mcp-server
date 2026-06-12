@@ -1,5 +1,5 @@
 """Application context: wires settings → store → provider, and reconciles
-pending transactions on startup (spec §4.1).
+pending transactions on startup.
 
 Both the MCP server (server.py) and the test suite build an ``AppContext`` so
 the tool layer is identical in production and under test.
@@ -54,7 +54,7 @@ def _log_startup(ctx: AppContext) -> None:
     if pending:
         # We do not auto-resolve on startup (that would make network calls before
         # the client is ready); we surface the worklist. check_payment_status
-        # reconciles each on demand, reusing the stored reference_id (§4.1).
+        # reconciles each on demand, reusing the stored reference_id.
         log.info(
             "pending transactions awaiting reconciliation",
             extra={"reference_ids": [t.reference_id for t in pending]},

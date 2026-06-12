@@ -1,8 +1,8 @@
-"""MCP server entry point — FastMCP over stdio (spec §4, Phase 4).
+"""MCP server entry point, FastMCP over stdio.
 
-Every tool here delegates to the PaymentProvider (never MTN directly, §1) and is
+Every tool here delegates to the PaymentProvider (never MTN directly) and is
 wrapped in :func:`audit_call` so each invocation lands exactly one append-only
-audit row (§4.2), including guardrail rejections and errors. Tool docstrings are
+audit row, including guardrail rejections and errors. Tool docstrings are
 written for an LLM consumer: they state preconditions and what to do next.
 
 Run:  momo-mcp-server         (console script)
@@ -34,10 +34,10 @@ _ctx: AppContext | None = None
 mcp = FastMCP(
     name="momo-mcp-server",
     instructions=(
-        "Safety-first MTN Mobile Money (sandbox) tools. Money-moving actions are "
-        "guarded: amounts over the per-transaction limit, numbers off the "
-        "allowlist, and payouts without human approval are REJECTED — when a tool "
-        "returns a rejection, inform the user and do NOT retry. Payments resolve "
+        "MTN Mobile Money (sandbox) tools. Money-moving actions are guarded: "
+        "amounts over the per-transaction limit, numbers off the allowlist, and "
+        "payouts without human approval are REJECTED. When a tool returns a "
+        "rejection, inform the user and do NOT retry. Payments resolve "
         "asynchronously: request_payment returns a transaction_id immediately; "
         "call check_payment_status to learn the outcome. Payouts require a second "
         "confirm_payout call with the one-time approval_code."
@@ -90,7 +90,7 @@ async def request_payment(
     """Ask a payer (their MSISDN) to approve a charge (MTN Collections).
 
     Precondition: in sandbox the MSISDN must be on the allowlist. Returns a
-    transaction_id immediately with status PENDING — the payer approves on their
+    transaction_id immediately with status PENDING, the payer approves on their
     phone asynchronously. Next step: poll check_payment_status with the returned
     transaction_id to learn whether it became SUCCESSFUL/FAILED/REJECTED/TIMEOUT.
     """
@@ -133,13 +133,13 @@ async def check_payment_status(transaction_id: str) -> dict[str, Any]:
 async def send_payout(
     msisdn: str, amount: float, currency: str = "EUR", note: str | None = None,
 ) -> dict[str, Any]:
-    """Send money to an MSISDN (MTN Disbursements) — APPROVAL-GATED.
+    """Send money to an MSISDN (MTN Disbursements), APPROVAL-GATED.
 
     This does NOT move money by itself. When approval is required (the default),
     it returns pending_approval=true with a one-time approval_code and sends
     nothing. A human must approve; then call confirm_payout(approval_code) to
     execute. Amounts over the per-transaction limit, off-allowlist numbers, or a
-    breached daily limit are rejected — inform the user, do not retry.
+    breached daily limit are rejected, inform the user, do not retry.
     """
     ctx = _app()
     payload = {"msisdn": msisdn, "amount": amount, "currency": currency}
@@ -162,7 +162,7 @@ async def confirm_payout(approval_code: str) -> dict[str, Any]:
     """Execute a payout previously requested via send_payout, using its one-time
     approval_code. The code is single-use and time-limited; a forged, expired, or
     already-used code is rejected. On success the payout is sent and a
-    transaction_id is returned — poll check_payment_status for the outcome.
+    transaction_id is returned, poll check_payment_status for the outcome.
     """
     ctx = _app()
     try:
@@ -197,7 +197,7 @@ async def get_balance(account: str = "collection") -> dict[str, Any]:
 async def validate_account(msisdn: str) -> dict[str, Any]:
     """Pre-flight check whether an MSISDN is an active MoMo account before
     charging it. Cheap; reduces failed requests. Note: this endpoint is
-    unreliable in the MTN sandbox (see GOTCHAS) — trust it in production.
+    unreliable in the MTN sandbox (see GOTCHAS), trust it in production.
     """
     ctx = _app()
     try:
@@ -233,7 +233,7 @@ async def get_provider_health() -> dict[str, Any]:
     ctx = _app()
     with audit_call(ctx.store, tool="get_provider_health", payload={}) as scope:
         health = await ctx.provider.health()
-        # Guardrail accounting (counts dry-run, so limits show in demos)...
+        # Guardrail accounting counts dry-run so limits cover the default mode.
         limit_usage = ctx.store.daily_usage()
         # ...and real money actually moved (excludes dry-run).
         real_usage = ctx.store.daily_usage(include_dry_run=False)
@@ -248,10 +248,10 @@ async def get_provider_health() -> dict[str, Any]:
         }
 
 
-# ── ledger exposed as an MCP resource (good-citizen, §7.2) ───────────────────
+# ── ledger exposed as an MCP resource (good-citizen) ───────────────────
 @mcp.resource("ledger://transactions/recent")
 def recent_ledger() -> str:
-    """The 100 most recent ledger transactions as JSON — readable by MCP clients
+    """The 100 most recent ledger transactions as JSON, readable by MCP clients
     that browse resources (e.g. Glama), without invoking a tool."""
     import json
 

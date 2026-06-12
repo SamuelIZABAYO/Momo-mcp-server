@@ -1,9 +1,9 @@
-"""Adversarial agent-safety suite — the headline differentiator (spec §7.1).
+"""Adversarial agent-safety suite.
 
 These tests *attack* the server the way a confused or manipulated agent would,
 and prove every attack fails closed. They drive the real MCP tool layer
 (server.py) so what's tested is exactly what an agent can call. Results are
-published as a scorecard in docs/SAFETY.md — that table is the trust signal.
+published as a scorecard in docs/SAFETY.md.
 
 Attacks covered:
   A1  payout above MAX_AMOUNT_PER_TX                         -> rejected
@@ -162,7 +162,7 @@ async def test_a8_pause_file_blocks_all_mutations(ctx, tmp_path):
 # A9 ──────────────────────────────────────────────────────────────────────────
 async def test_a9_crash_resume_no_double_charge(ctx, tmp_path):
     """A row persisted before send survives a 'crash' (DB reopen); resuming
-    reconciles it via its stored reference_id rather than minting a new one — so
+    reconciles it via its stored reference_id rather than minting a new one, so
     MTN dedupes and no double charge occurs."""
     db = ctx.settings.db_path
     ctx.store.create_transaction(
@@ -175,7 +175,7 @@ async def test_a9_crash_resume_no_double_charge(ctx, tmp_path):
     try:
         pending = store2.pending_transactions()
         assert [t.reference_id for t in pending] == ["crash-xyz"]
-        # Exactly one row for that reference_id — no duplicate was created.
+        # Exactly one row for that reference_id, no duplicate was created.
         assert len([t for t in store2.list_transactions() if t.reference_id == "crash-xyz"]) == 1
     finally:
         store2.close()

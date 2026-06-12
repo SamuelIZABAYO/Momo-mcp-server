@@ -1,15 +1,14 @@
-"""MTN MoMo provider — Collections implemented (Phase 2); Disbursements + the
-remaining tools land in Phase 3.
+"""MTN MoMo provider.
 
-All endpoint behavior below was verified against the live sandbox on 2026-06-11
-(Hard Rule #1). See docs/GOTCHAS.md for the quirks this code defends against:
-empty 202 bodies, reason-derived status, EUR-only, blocked balance, etc.
+All endpoint behavior below was verified against the live sandbox on 2026-06-11.
+See docs/GOTCHAS.md for the quirks this code defends against: empty 202 bodies,
+reason-derived status, EUR-only, blocked balance, etc.
 
-Safety properties enforced here (so no tool can bypass them, spec §4.7):
-  * guardrail gauntlet runs BEFORE any HTTP call;
-  * the idempotency row is persisted in SQLite BEFORE the request is sent (§4.1),
+Safety properties enforced here so no tool can bypass them:
+  * guardrail checks run BEFORE any HTTP call;
+  * the idempotency row is persisted in SQLite BEFORE the request is sent,
     so a crash leaves a recoverable PENDING row and a retry reuses the same
-    X-Reference-Id (MTN dedupes — no double charge);
+    X-Reference-Id (MTN dedupes, no double charge);
   * DRY_RUN short-circuits to a simulated response with zero HTTP calls;
   * a 401 triggers exactly one forced token refresh + one retry, never a loop.
 """
@@ -43,10 +42,10 @@ from .base import (
 
 log = get_logger("mtn")
 
-# Approval code time-to-live in minutes (§4.3).
+# Approval code time-to-live in minutes.
 _APPROVAL_TTL_MIN = 15
 
-# Map MTN's raw (status, reason) onto our normalized PaymentStatus (GOTCHAS §2).
+# Map MTN's raw (status, reason) onto our normalized PaymentStatus (GOTCHAS).
 _REASON_TO_STATUS = {
     "APPROVAL_REJECTED": PaymentStatus.REJECTED,
     "EXPIRED": PaymentStatus.TIMEOUT,
@@ -60,7 +59,7 @@ def normalize_status(raw_status: str, reason: str | None) -> PaymentStatus:
     """Collapse MTN's (status, reason) into our 5 canonical states.
 
     A bare ``FAILED`` with a reason of ``APPROVAL_REJECTED``/``EXPIRED`` becomes
-    ``REJECTED``/``TIMEOUT`` respectively — see GOTCHAS §2."""
+    ``REJECTED``/``TIMEOUT`` respectively, see GOTCHAS."""
     raw = (raw_status or "").upper()
     if raw == "SUCCESSFUL":
         return PaymentStatus.SUCCESSFUL
@@ -68,7 +67,7 @@ def normalize_status(raw_status: str, reason: str | None) -> PaymentStatus:
         return PaymentStatus.PENDING
     if raw == "FAILED":
         return _REASON_TO_STATUS.get((reason or "").upper(), PaymentStatus.FAILED)
-    # Unknown/unexpected — treat as FAILED rather than silently passing through.
+    # Unknown/unexpected, treat as FAILED rather than silently passing through.
     return PaymentStatus.FAILED
 
 
@@ -82,7 +81,7 @@ class MTNProvider(PaymentProvider):
         self._owns_client = client is None
         self._bucket = TokenBucket(settings.rate_limit_per_sec)
         self._last_latency_ms: int | None = None
-        # Token managers per product. Disbursement token used in Phase 3.
+        # Token managers per product.
         self._collection_tokens = TokenManager(
             client=self._client,
             base_url=settings.base_url,
@@ -91,7 +90,7 @@ class MTNProvider(PaymentProvider):
             api_key=settings.api_key or "",
             subscription_key=settings.collection_subscription_key,
         )
-        # Disbursements reuse the same provisioned API user/key (GOTCHAS §10),
+        # Disbursements reuse the same provisioned API user/key (GOTCHAS),
         # with the disbursement subscription key.
         self._disbursement_tokens = TokenManager(
             client=self._client,
@@ -114,7 +113,7 @@ class MTNProvider(PaymentProvider):
             return self._disbursement_tokens, self._settings.disbursement_subscription_key
         raise ValueError(f"unknown product {product!r}")
 
-    # ── shared request helper: rate limit + 401-retry-once (§3.2) ────────────
+    # ── shared request helper: rate limit + 401-retry-once ────────────
     async def _authed_request(
         self,
         method: str,
@@ -144,7 +143,7 @@ class MTNProvider(PaymentProvider):
         token = await tokens.get_token()
         resp = await _do(token)
         if resp.status_code == 401:
-            # Refresh once, retry once — never loop (§3.2).
+            # Refresh once, retry once, never loop.
             log.info("401 received; forcing token refresh and retrying once",
                      extra={"path": path})
             token = await tokens.get_token(force_refresh=True)
@@ -161,12 +160,12 @@ class MTNProvider(PaymentProvider):
         external_ref: str | None = None,
         note: str | None = None,
     ) -> PaymentResult:
-        # 1) Guardrails BEFORE anything else (§4.7) — raises GuardrailRejection.
+        # 1) Guardrails BEFORE anything else, raises GuardrailRejection.
         enforce_mutation(
             msisdn=msisdn, amount=amount, settings=self._settings, store=self._store
         )
 
-        # 2) Generate + persist the idempotency key BEFORE the HTTP call (§4.1).
+        # 2) Generate + persist the idempotency key BEFORE the HTTP call.
         reference_id = str(uuid.uuid4())
         self._store.create_transaction(
             reference_id=reference_id,
@@ -180,7 +179,7 @@ class MTNProvider(PaymentProvider):
             note=note,
         )
 
-        # 3) DRY_RUN: zero HTTP calls, realistic simulated response (§4.7).
+        # 3) DRY_RUN: zero HTTP calls, realistic simulated response.
         if self._settings.dry_run:
             log.info("dry-run request_payment", extra={"msisdn": mask_msisdn(msisdn)})
             return PaymentResult(
@@ -194,7 +193,7 @@ class MTNProvider(PaymentProvider):
                 raw_status="PENDING",
             )
 
-        # 4) Real call. 202 with empty body is success (GOTCHAS §1).
+        # 4) Real call. 202 with empty body is success (GOTCHAS).
         body = {
             "amount": str(amount),
             "currency": currency,
@@ -222,7 +221,7 @@ class MTNProvider(PaymentProvider):
                 retryable=resp.status_code >= 500,
             )
 
-        # Do NOT parse the 202 body — it is empty (GOTCHAS §1).
+        # Do NOT parse the 202 body, it is empty (GOTCHAS).
         return PaymentResult(
             transaction_id=reference_id,
             status=PaymentStatus.PENDING,
@@ -233,7 +232,7 @@ class MTNProvider(PaymentProvider):
             raw_status="PENDING",
         )
 
-    # ── check_payment_status (poll with backoff, §3.4) ───────────────────────
+    # ── check_payment_status (poll with backoff) ───────────────────────
     async def check_payment_status(self, transaction_id: str) -> PaymentResult:
         tx = self._store.get_transaction(transaction_id)
         if tx is None:
@@ -244,8 +243,8 @@ class MTNProvider(PaymentProvider):
 
         if tx.dry_run:
             # Deterministic simulated resolution from the fixture mapping is the
-            # job of tests; here we resolve a dry-run row to SUCCESSFUL for demo
-            # realism and persist it (§4.7: ledger rows flagged dry_run).
+            # job of tests; here dry-run resolves to SUCCESSFUL and is persisted
+            # with the ledger row flagged dry_run.
             self._store.update_status(transaction_id, "SUCCESSFUL")
             return PaymentResult(
                 transaction_id=transaction_id,
@@ -265,7 +264,7 @@ class MTNProvider(PaymentProvider):
             )
 
         # Status path + product depend on whether this was a collection or a
-        # disbursement (GOTCHAS §11): transfers poll a different URL.
+        # disbursement (GOTCHAS): transfers poll a different URL.
         if tx.kind == "disbursement":
             status_path = f"/disbursement/v1_0/transfer/{transaction_id}"
             product = "disbursement"
@@ -273,7 +272,7 @@ class MTNProvider(PaymentProvider):
             status_path = f"/collection/v1_0/requesttopay/{transaction_id}"
             product = "collection"
 
-        # Poll with capped backoff: 2,4,8,16,30 → ~60s total (§3.4).
+        # Poll with capped backoff: 2,4,8,16,30 → ~60s total.
         delays = [0, 2, 4, 8, 16, 30]
         last: PaymentResult | None = None
         for delay in delays:
@@ -323,7 +322,7 @@ class MTNProvider(PaymentProvider):
             case _:
                 return "Payment is still pending payer approval."
 
-    # ── send_payout (Disbursements transfer, approval-gated §4.3) ────────────
+    # ── send_payout (Disbursements transfer, approval-gated) ────────────
     async def send_payout(
         self,
         *,
@@ -333,15 +332,14 @@ class MTNProvider(PaymentProvider):
         approval_code: str | None = None,
         note: str | None = None,
     ) -> PayoutResult:
-        # Guardrails first (§4.7) — same gauntlet as collections.
+        # Guardrails first, same checks as collections.
         enforce_mutation(
             msisdn=msisdn, amount=amount, settings=self._settings, store=self._store
         )
 
         # Approval gate: when required and no code supplied, mint a one-time code
         # and STOP. The money does not move until confirm_payout is called with
-        # this code. This is what makes "the AI cannot move money unilaterally"
-        # demonstrable (§4.3, §7.1).
+        # this code.
         if self._settings.require_payout_approval and not approval_code:
             code = uuid.uuid4().hex[:12].upper()
             expires_at = (
@@ -386,9 +384,9 @@ class MTNProvider(PaymentProvider):
         return await self._execute_transfer(msisdn, amount, currency, note)
 
     async def confirm_payout(self, approval_code: str) -> PayoutResult:
-        """Execute a previously-requested payout using its one-time code (§4.3).
+        """Execute a previously-requested payout using its one-time code.
 
-        Looks up the pending approval (without consuming it yet — _execute path
+        Looks up the pending approval (without consuming it yet, _execute path
         via send_payout consumes it), then runs send_payout with the code so the
         single consume+execute path is shared.
         """
@@ -409,7 +407,7 @@ class MTNProvider(PaymentProvider):
         self, msisdn: str, amount: float, currency: str, note: str | None
     ) -> PayoutResult:
         reference_id = str(uuid.uuid4())
-        # Persist before send (§4.1).
+        # Persist before send.
         self._store.create_transaction(
             reference_id=reference_id, kind="disbursement", tool="send_payout",
             msisdn=msisdn, amount=amount, currency=currency,
@@ -453,7 +451,7 @@ class MTNProvider(PaymentProvider):
             ),
         )
 
-    # ── get_balance (blocked in sandbox — GOTCHAS §5) ────────────────────────
+    # ── get_balance (blocked in sandbox, GOTCHAS) ────────────────────────
     async def get_balance(self, account: str) -> BalanceResult:
         if account not in ("collection", "disbursement"):
             raise ProviderError("account must be 'collection' or 'disbursement'.")
@@ -471,7 +469,7 @@ class MTNProvider(PaymentProvider):
             raise ProviderError(
                 f"get_balance unavailable (HTTP {resp.status_code}): "
                 f"{resp.text[:200]}. Note: balance is not permitted in the sandbox "
-                "tier (see GOTCHAS §5); this works once go-live permissions are "
+                "tier (see GOTCHAS); this works once go-live permissions are "
                 "granted. Not a retryable error."
             )
         data = resp.json()
@@ -481,7 +479,7 @@ class MTNProvider(PaymentProvider):
             currency=data.get("currency", self._settings.currency),
         )
 
-    # ── validate_account (inconsistent in sandbox — GOTCHAS §6) ──────────────
+    # ── validate_account (inconsistent in sandbox, GOTCHAS) ──────────────
     async def validate_account(self, msisdn: str) -> AccountValidation:
         if self._settings.dry_run:
             return AccountValidation(
@@ -504,7 +502,7 @@ class MTNProvider(PaymentProvider):
                 msisdn_masked=mask_msisdn(msisdn), is_active=False,
                 message=(
                     "Account not found. Note: in sandbox this endpoint is "
-                    "unreliable for the magic test numbers (GOTCHAS §6)."
+                    "unreliable for the magic test numbers (GOTCHAS)."
                 ),
             )
         raise ProviderError(

@@ -1,11 +1,11 @@
-"""The ``PaymentProvider`` abstract interface — the seam that makes this server
-provider-agnostic (spec §1).
+"""The ``PaymentProvider`` abstract interface, the seam that makes this server
+provider-agnostic.
 
 MCP tools depend only on this interface and on the structured result objects
 below. MTN is the one concrete implementation in v1; Airtel ships as a stub
-implementing the same contract (§8.5). The provider layer is also where agent
-guardrails are enforced so no tool can bypass them (§4.7) — that enforcement
-lands with the MTN implementation in Phase 2/3; this file defines the shapes.
+implementing the same contract. The provider layer is also where agent
+guardrails are enforced so no tool can bypass them, that enforcement
+lands with the MTN implementation in/3; this file defines the shapes.
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ from enum import StrEnum
 
 class PaymentStatus(StrEnum):
     """Normalized, provider-independent status. MTN's raw statuses map onto
-    these in the MTN provider (§2: check_payment_status mapping)."""
+    these in the MTN provider's check_payment_status mapping."""
 
     PENDING = "PENDING"
     SUCCESSFUL = "SUCCESSFUL"
@@ -40,7 +40,7 @@ class PaymentResult:
 @dataclass(frozen=True)
 class PayoutResult:
     """Outcome of a disbursement. ``pending_approval`` is the approval-gate
-    state (§4.3) — the payout has NOT been sent; a confirm step is required."""
+    state, the payout has NOT been sent; a confirm step is required."""
 
     transaction_id: str | None
     status: PaymentStatus | None
@@ -77,7 +77,7 @@ class ProviderHealth:
 
 class ProviderError(RuntimeError):
     """Base for provider-level failures. ``message`` is safe to surface to the
-    LLM and should tell it what to do next (spec §2)."""
+    LLM and should tell it what to do next."""
 
     def __init__(self, message: str, *, retryable: bool = False):
         super().__init__(message)
@@ -85,7 +85,7 @@ class ProviderError(RuntimeError):
 
 
 class GuardrailRejection(ProviderError):
-    """A guardrail blocked the action (§4.7). Never retryable — the LLM must
+    """A guardrail blocked the action. Never retryable, the LLM must
     inform the user, not retry. Carries a ``reason_code`` for the audit log."""
 
     def __init__(self, message: str, *, reason_code: str):
@@ -134,12 +134,12 @@ class PaymentProvider(ABC):
         approval_code: str | None = None,
         note: str | None = None,
     ) -> PayoutResult:
-        """Disbursement transfer — approval-gated (§4.3)."""
+        """Disbursement transfer, approval-gated."""
 
     async def confirm_payout(self, approval_code: str) -> PayoutResult:
-        """Execute a previously-requested payout using its one-time approval code
-        (§4.3). Default raises NotImplementedError; providers that support the
-        approval gate override it."""
+        """Execute a previously-requested payout using its one-time approval code.
+        Default raises NotImplementedError; providers that support the approval
+        gate override it."""
         raise NotImplementedError("This provider does not implement payout approval.")
 
     @abstractmethod

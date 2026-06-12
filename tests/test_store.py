@@ -112,7 +112,7 @@ def test_approval_single_use(store):
                           currency="EUR", expires_at=_future())
     first = store.consume_approval("C1")
     assert first is not None
-    # Replay must fail (§7.1).
+    # Replay must fail.
     assert store.consume_approval("C1") is None
 
 
@@ -122,7 +122,7 @@ def test_get_approval_is_read_only(store):
     row = store.get_approval("PEEK")
     assert row is not None and row["msisdn"] == "46733123450"
     assert row["consumed_at"] is None
-    # Peeking must NOT consume — the code is still usable afterwards.
+    # Peeking must NOT consume, the code is still usable afterwards.
     assert store.consume_approval("PEEK") is not None
     assert store.get_approval("missing") is None
 
@@ -153,11 +153,11 @@ def test_reset_limits_clears_count_but_keeps_history(store):
 
 def test_idempotency_survives_reopen(tmp_path):
     """Persisted-before-send survives a process restart: reopen the DB file and
-    the PENDING row is still there for reconciliation (§4.1)."""
+    the PENDING row is still there for reconciliation."""
     path = tmp_path / "persist.sqlite3"
     s1 = Store(path)
     _create(s1, "crash-ref")
-    s1.close()  # simulate crash/restart — no status update happened
+    s1.close()  # simulate crash/restart, no status update happened
     s2 = Store(path)
     pending = s2.pending_transactions()
     assert [t.reference_id for t in pending] == ["crash-ref"]

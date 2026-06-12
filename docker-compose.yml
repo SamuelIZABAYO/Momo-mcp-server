@@ -1,4 +1,4 @@
-# VPS / always-on deployment (spec §4.8). For local MCP-client use you do not
+# VPS / always-on deployment. For local MCP-client use you do not
 # need compose — clients launch the image directly with `docker run -i --rm`
 # (see README). This file is for running the server as a managed service.
 services:

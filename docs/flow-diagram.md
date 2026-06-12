@@ -1,10 +1,9 @@
-# Payment flow — including the ugly paths
+# Payment flow
 
-The happy path is easy. What follows deliberately includes the **failure and
-recovery paths** (timeout, crash, reconciliation), because those are what
-determine whether a payments integration is trustworthy.
+These diagrams include the failure and recovery paths (timeout, crash,
+reconciliation), not just the happy path.
 
-## Collections: `request_payment` → `check_payment_status`
+## Collections: request_payment then check_payment_status
 
 ```mermaid
 sequenceDiagram
@@ -18,9 +17,9 @@ sequenceDiagram
     Srv->>Srv: guardrails (PAUSE, allowlist, per-tx, daily)
     alt rejected by a guardrail
         Srv->>DB: audit row rejected:<reason>
-        Srv-->>Agent: rejected — inform user, do not retry
+        Srv-->>Agent: rejected; inform user, do not retry
     else allowed
-        Srv->>DB: INSERT transaction PENDING (reference_id) — BEFORE send
+        Srv->>DB: INSERT transaction PENDING (reference_id), BEFORE send
         Srv->>MTN: POST /collection/v1_0/requesttopay (X-Reference-Id)
         MTN-->>Srv: 202 Accepted (empty body)
         Srv-->>Agent: transaction_id, status=PENDING
@@ -52,7 +51,7 @@ sequenceDiagram
 
     Srv->>DB: INSERT PENDING (reference_id)
     Srv--xMTN: POST requesttopay … 💥 process crashes mid-call
-    Note over Srv,DB: the PENDING row survives — it was written BEFORE the send
+    Note over Srv,DB: the PENDING row survives; it was written BEFORE the send
 
     rect rgb(235,245,255)
         Note over Srv: restart
@@ -86,14 +85,14 @@ sequenceDiagram
         MTN-->>Srv: 202 Accepted
         Srv-->>Agent: transaction_id, PENDING
     else forged / expired / replayed / mismatched
-        Srv-->>Agent: rejected — inform user, do not retry
+        Srv-->>Agent: rejected; inform user, do not retry
     end
 ```
 
 ## Status normalization (the sandbox quirk)
 
 MTN returns `status: FAILED` for several distinct outcomes; the **`reason`**
-field disambiguates them (see [GOTCHAS §2](GOTCHAS.md)):
+field disambiguates them (see [GOTCHAS](GOTCHAS.md)):
 
 | MTN `status` | MTN `reason` | Normalized |
 |---|---|---|

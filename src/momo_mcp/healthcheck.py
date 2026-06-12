@@ -1,7 +1,7 @@
-"""Container HEALTHCHECK entry point (spec §4.8).
+"""Container HEALTHCHECK entry point.
 
 Exits 0 when the server can construct its app context (config valid, store
-reachable) — "healthy"; exits 1 otherwise — "degraded". It deliberately does NOT
+reachable), "healthy"; exits 1 otherwise, "degraded". It does NOT
 make a network call to MTN: a sandbox token fetch can fail for reasons unrelated
 to container health (throttling, sandbox downtime), and we don't want a flaky
 upstream to mark the container unhealthy and trigger a restart loop.

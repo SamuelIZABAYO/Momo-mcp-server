@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-# ── Hardened, multi-stage build (spec §4.8) ──────────────────────────────────
+# ── Hardened, multi-stage build ──────────────────────────────────────────────
 # Base pinned by digest (python:3.12-slim, resolved 2026-06-11). No `latest`.
 #
 # Image size: ~242MB. The spec's original <200MB target is NOT met, by choice.

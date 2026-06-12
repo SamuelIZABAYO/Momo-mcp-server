@@ -1,4 +1,4 @@
-"""Guardrail checks exercised directly — the seeds of the §7.1 safety suite."""
+"""Guardrail checks exercised directly, the seeds of the safety suite."""
 
 from __future__ import annotations
 

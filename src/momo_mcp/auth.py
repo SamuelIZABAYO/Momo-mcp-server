@@ -1,4 +1,4 @@
-"""OAuth token acquisition + caching for MTN MoMo (spec §3.2).
+"""OAuth token acquisition + caching for MTN MoMo.
 
 Verified against the live sandbox (2026-06-11):
     POST {base}/{product}/token/
@@ -9,10 +9,10 @@ Behavior contract:
   * Token cached in memory with its expiry; refreshed **proactively at 80% of
     lifetime** so a request never races a hard expiry.
   * On a 401 from a business call, the caller asks for a forced refresh and
-    retries **once** — never a loop (spec §3.2). The retry budget lives in the
+    retries **once**, never a loop. The retry budget lives in the
     provider; this module just hands out tokens and supports forced refresh.
   * ``token_type`` from MTN is the literal string ``"access_token"``; we always
-    send ``Authorization: Bearer <token>`` regardless (see GOTCHAS §8).
+    send ``Authorization: Bearer <token>`` regardless (see GOTCHAS).
 """
 
 from __future__ import annotations
@@ -41,7 +41,7 @@ class _CachedToken:
 class TokenManager:
     """Caches a bearer token for one product ('collection' or 'disbursement').
 
-    Not goroutine-safe by design — the server is single-process and calls are
+    Not goroutine-safe by design, the server is single-process and calls are
     serialized through the provider. An ``httpx.AsyncClient`` is injected so the
     same client (and its connection pool / rate limiter) is reused.
     """
@@ -96,7 +96,7 @@ class TokenManager:
         }
         resp = await self._client.post(url, headers=headers)
         if resp.status_code != 200:
-            # Message is LLM-actionable (spec §2): point at the likely cause.
+            # Message is LLM-actionable: point at the likely cause.
             raise AuthError(
                 f"Token request for {self._product} failed (HTTP {resp.status_code}). "
                 "Check the subscription key and that the API user/key were provisioned "

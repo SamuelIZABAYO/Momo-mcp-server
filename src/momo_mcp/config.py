@@ -1,13 +1,13 @@
-"""Environment loading and validation — fail fast, with clear, actionable errors.
+"""Environment loading and validation, fail fast, with clear, actionable errors.
 
-Design rules (spec §4.4, Hard Rules #2 & #3):
+Design rules:
   * Secrets come only from the environment / .env, never from code.
   * The process refuses to start if configuration is incoherent, rather than
     failing deep inside an API call with a cryptic message.
   * ``Settings`` carries the secret values but its ``repr``/``str`` redact them,
-    so a stray ``log.info(settings)`` can never leak a key (§4.4).
-  * Sandbox only — a non-sandbox target environment is rejected here so no
-    production code path can ever run from this repo (Hard Rule #3).
+    so a stray ``log.info(settings)`` can never leak a key.
+  * Sandbox only, a non-sandbox target environment is rejected here so no
+    production code path can ever run from this repo.
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-# Fields that hold secrets — never rendered in repr/str, never logged.
+# Fields that hold secrets, never rendered in repr/str, never logged.
 _SECRET_FIELDS = frozenset(
     {
         "collection_subscription_key",
@@ -29,7 +29,7 @@ _SECRET_FIELDS = frozenset(
     }
 )
 
-# Currencies we accept. Sandbox is EUR-only; RWF is reserved for go-live (§3.6).
+# Currencies we accept. Sandbox is EUR-only; RWF is reserved for go-live.
 _ALLOWED_CURRENCIES = frozenset({"EUR", "RWF"})
 
 
@@ -38,7 +38,7 @@ class ConfigError(RuntimeError):
 
 
 def _redact(value: str | None) -> str:
-    """Render a secret as a length hint only — never the value itself."""
+    """Render a secret as a length hint only, never the value itself."""
     if not value:
         return "<unset>"
     return f"<set:{len(value)} chars>"
@@ -46,7 +46,7 @@ def _redact(value: str | None) -> str:
 
 # Env vars whose values must NOT have inline-comment stripping applied (a secret
 # could, in principle, contain a '#'). Everything else is a simple scalar where a
-# trailing " # comment" is never intended — and `docker run --env-file` does not
+# trailing " # comment" is never intended, and `docker run --env-file` does not
 # strip those, so we do it defensively here.
 _SECRET_ENV = frozenset(
     {
@@ -122,7 +122,7 @@ class Settings:
     callback_host: str
     currency: str
 
-    # Guardrails (§4.7)
+    # Guardrails
     dry_run: bool
     require_payout_approval: bool
     max_amount_per_tx: int
@@ -183,12 +183,12 @@ def load_settings(env_file: str | os.PathLike[str] | None = ".env") -> Settings:
             "your .env (see .env.example)."
         )
 
-    # ── sandbox-only enforcement (Hard Rule #3) ──────────────────────────────
+    # ── sandbox-only enforcement ──────────────────────────────
     target_env = (_get("MOMO_TARGET_ENV") or "sandbox").lower()
     if target_env != "sandbox":
         raise ConfigError(
             f"MOMO_TARGET_ENV={target_env!r} is not allowed. This repo is "
-            "sandbox-only by policy (Hard Rule #3); production targets are out "
+            "sandbox-only by policy; production targets are out "
             "of scope. Set MOMO_TARGET_ENV=sandbox."
         )
 
@@ -198,7 +198,7 @@ def load_settings(env_file: str | os.PathLike[str] | None = ".env") -> Settings:
     if "sandbox" not in base_url:
         raise ConfigError(
             f"MOMO_BASE_URL={base_url!r} does not look like a sandbox host. "
-            "Only the sandbox base URL is permitted in this repo (Hard Rule #3)."
+            "Only the sandbox base URL is permitted in this repo."
         )
 
     currency = (_get("MOMO_CURRENCY") or "EUR").upper()

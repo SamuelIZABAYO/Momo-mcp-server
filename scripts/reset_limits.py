@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Human-triggered daily spend-limit reset (spec §4.7).
+"""Human-triggered daily spend-limit reset.
 
 When a daily limit (count or total) is breached, mutating tools hard-stop until a
 human runs this script. It records a reset marker; daily_usage then counts only

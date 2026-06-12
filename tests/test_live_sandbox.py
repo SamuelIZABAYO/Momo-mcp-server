@@ -1,9 +1,9 @@
-"""Live sandbox suite — hits the REAL MTN sandbox. Opt-in only.
+"""Live sandbox suite, hits the REAL MTN sandbox. Opt-in only.
 
 Run with:  pytest -m live
 Requires a valid .env (subscription keys + provisioned API user/key). Skipped
 automatically if config can't load. Exercises EVERY magic-number outcome so the
-reason→status normalization is proven against reality (spec §3.5).
+reason→status normalization is proven against reality.
 """
 
 from __future__ import annotations
@@ -52,8 +52,8 @@ async def test_live_request_and_status_all_outcomes(provider, msisdn, expected):
 
     res = await provider.check_payment_status(req.transaction_id)
     # Sandbox timing is non-deterministic: a transaction may still be PENDING
-    # after our ~60s poll budget (see GOTCHAS §3). PENDING is a correct,
-    # non-terminal state — not a mapping error — so accept it. What we are
+    # after our ~60s poll budget (see GOTCHAS). PENDING is a correct,
+    # non-terminal state, not a mapping error, so accept it. What we are
     # really proving is that NON-pending outcomes normalize correctly: a number
     # that is meant to FAIL/REJECT/TIMEOUT must never come back SUCCESSFUL, and
     # vice versa.
@@ -70,7 +70,7 @@ async def test_live_request_and_status_all_outcomes(provider, msisdn, expected):
 
 async def test_live_payout_approval_gate(provider):
     """send_payout must not move money without approval, then must execute with a
-    valid code — verified against the real disbursement transfer endpoint."""
+    valid code, verified against the real disbursement transfer endpoint."""
     pending = await provider.send_payout(msisdn="46733123451", amount=5, currency="EUR")
     assert pending.pending_approval is True
     assert pending.transaction_id is None  # nothing sent yet
@@ -83,9 +83,9 @@ async def test_live_payout_approval_gate(provider):
 
 
 async def test_live_balance_handled_either_way(provider):
-    """Balance is inconsistently available in sandbox (GOTCHAS §5): it has
+    """Balance is inconsistently available in sandbox (GOTCHAS): it has
     returned 500 NOT_ALLOWED, 404 RESOURCE_NOT_FOUND, and 200 on different runs.
-    Whichever happens, the tool must behave sanely — either raise a clear
+    Whichever happens, the tool must behave sanely, either raise a clear
     ProviderError or return a structured BalanceResult, never crash. The
     deterministic blocked-path assertion lives in the mocked unit tests."""
     from momo_mcp.providers.base import BalanceResult, ProviderError

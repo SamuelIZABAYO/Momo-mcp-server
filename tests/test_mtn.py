@@ -45,7 +45,7 @@ def _token():
     return httpx.Response(200, json={"access_token": "t", "token_type": "access_token", "expires_in": 3600})
 
 
-# ── normalization (the reason→status logic, GOTCHAS §2) ──────────────────────
+# ── normalization (the reason→status logic, GOTCHAS) ──────────────────────
 @pytest.mark.parametrize(
     "raw,reason,expected",
     [
@@ -93,7 +93,7 @@ async def test_request_payment_guardrail_blocks_unknown_msisdn(monkeypatch, stor
     try:
         with pytest.raises(GuardrailRejection):
             await provider.request_payment(msisdn="46700000999", amount=5, currency="EUR")
-        # Guardrail fired BEFORE any HTTP call — no requesttopay sent, no ledger row.
+        # Guardrail fired BEFORE any HTTP call, no requesttopay sent, no ledger row.
         assert rtp.call_count == 0
         assert store.list_transactions() == []
     finally:
@@ -185,8 +185,8 @@ async def test_check_status_unknown_id_raises(monkeypatch, store):
 
 @respx.mock
 async def test_crash_resume_no_double_charge(monkeypatch, tmp_path):
-    """Phase 2 acceptance: a crash mid-call leaves a recoverable PENDING row, and
-    resuming reuses the SAME reference_id — MTN dedupes, so no double charge.
+    """ acceptance: a crash mid-call leaves a recoverable PENDING row, and
+    resuming reuses the SAME reference_id, MTN dedupes, so no double charge.
 
     We simulate the crash by persisting the row then 'restarting' (reopening the
     DB) and asserting the pending row is the reconciliation worklist, and that a

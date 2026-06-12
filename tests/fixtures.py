@@ -1,9 +1,9 @@
-"""Sandbox test fixtures — the magic MSISDNs and the reason→status mapping.
+"""Sandbox test fixtures, the magic MSISDNs and the reason→status mapping.
 
 These were verified directly against the live MTN sandbox on 2026-06-11 (see
-docs/GOTCHAS.md §2). The sandbox keys outcomes off the payer MSISDN, but every
+docs/GOTCHAS.md). The sandbox keys outcomes off the payer MSISDN, but every
 non-success outcome arrives as ``status: "FAILED"`` with a distinguishing
-``reason`` — so the normalized outcome is derived from ``reason``, not ``status``
+``reason``, so the normalized outcome is derived from ``reason``, not ``status``
 alone.
 """
 
@@ -26,6 +26,6 @@ MSISDN_TIMEOUT = "46733123452"
 # The sandbox allowlist mirrors these numbers (config MSISDN_ALLOWLIST default).
 SANDBOX_ALLOWLIST = tuple(SANDBOX_OUTCOMES.keys())
 
-# A number deliberately NOT on the allowlist — used to prove the guardrail
-# rejects hallucinated/unknown numbers (§7.1).
+# A number NOT on the allowlist, used to prove the guardrail
+# rejects hallucinated/unknown numbers.
 MSISDN_NOT_ALLOWLISTED = "46700000999"
